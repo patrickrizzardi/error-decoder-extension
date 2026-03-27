@@ -1,0 +1,17 @@
+{
+  "name": "error-decoder",
+  "private": true,
+  "workspaces": ["packages/*", "shared"],
+  "scripts": {
+    "dev:api": "bun run --filter @error-decoder/api dev",
+    "dev:web": "bun run --filter @error-decoder/web dev",
+    "dev:extension": "bun run --filter @error-decoder/extension dev",
+    "build:api": "bun run --filter @error-decoder/api build",
+    "build:web": "bun run --filter @error-decoder/web build",
+    "build:extension": "bun run --filter @error-decoder/extension build",
+    "stripe:setup": "bun run scripts/stripe-setup.ts",
+    "db:migrate": "bun run scripts/db-migrate.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  }
+}

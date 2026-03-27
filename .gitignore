@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+.pnp.*
+.yarn/
+
+# Build outputs
+dist/
+.next/
+.vercel/
+out/
+build/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Bun
+bun.lockb
+
+# Test coverage
+coverage/
+
+# Chrome extension build
+packages/extension/dist/
+*.crx
+*.pem
+
+# Vercel
+.vercel/
+
+# Supabase local
+.supabase/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Temp
+*.tmp
+*.temp
