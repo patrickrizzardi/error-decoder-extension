@@ -1,0 +1,14 @@
+{
+  "name": "@error-decoder/web",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "vite --port 4000",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "typescript": "latest",
+    "vite": "latest"
+  }
+}
