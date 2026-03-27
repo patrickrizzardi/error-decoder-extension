@@ -97,10 +97,14 @@ Phase 13: Verification sweep ← final
 **Structure**:
 ```
 error-decoder/
+├── docker-compose.yml        # Local dev: api + stripe-cli + web
+├── Dockerfile                # Dev stage for API (Bun)
 ├── package.json              # Bun workspaces
 ├── tsconfig.base.json        # Shared TS strict config
 ├── .gitignore
-├── .env.example              # All required env vars documented
+├── .env                      # All env vars (gitignored)
+├── scripts/
+│   └── stripe-setup.ts       # Declarative Stripe sync (products, prices, webhooks)
 ├── packages/
 │   ├── extension/            # Chrome extension (Vite + TypeScript)
 │   │   ├── manifest.json     # Manifest V3
@@ -129,12 +133,35 @@ error-decoder/
     └── types.ts
 ```
 
+**Local development — Docker Compose** (following VPM pattern):
+```yaml
+services:
+  api:
+    # Bun dev server with hot-reload
+    # Source mounted, anonymous volume for node_modules
+    # Exposes port 3000
+    # Health check: curl /api/health
+  stripe:
+    # stripe/stripe-cli container
+    # Forwards webhooks to api container
+    # Persists auth in named volume
+    # Uses STRIPE_SECRET_KEY from .env
+  web:
+    # Landing page dev server
+    # Source mounted, hot-reload
+    # Exposes port 4000
+```
+
+Network: custom bridge with fixed subnet (Stripe needs predictable IP for webhook forwarding).
+Extension: builds on host (`bun run build:extension`) — must load into local Chrome, can't run in container.
+
 **Key decisions**:
-- **Vite for extension build**: CRXJS or manual Vite config for Manifest V3 bundling
+- **Docker Compose for all local dev**: Matches Patrick's VPM pattern. API, Stripe listener, web all containerized.
+- **Vite for extension build**: CRXJS or manual Vite config for Manifest V3 bundling. Runs on host (needs Chrome).
 - **Hono for API**: Lightweight, fast, Bun-native, great Vercel support
 - **Static or Astro for landing page**: Minimal JS, fast load, good SEO
 
-**Quality gate**: `bun install && bun run build` succeeds. Extension loads in Chrome. API responds to curl.
+**Quality gate**: `docker compose up` starts all services. API health check passes. Stripe listener connects. Extension builds and loads in Chrome.
 
 ---
 
@@ -350,10 +377,27 @@ error-decoder/
 ### Phase 8: Stripe Payments
 **Objective**: Users can pay $9/mo or $79/year for Pro.
 
-**Stripe setup** (Patrick creates in dashboard):
-- Product: "Error Decoder Pro"
-- Price 1: $9/month recurring
-- Price 2: $79/year recurring (~27% savings)
+**Stripe setup — ALL programmatic (no manual dashboard config)**:
+- `scripts/stripe-setup.ts` — declarative sync script
+- Defines desired state in a config object: products, prices, webhook endpoints, event subscriptions
+- Script syncs Stripe to match: creates missing, archives removed (never hard-deletes — history preserved), updates changed
+- Idempotent — run 10 times, same result
+- Warns before archiving prices with active subscriptions
+- Products: "Error Decoder Pro"
+- Prices: $9/month recurring, $79/year recurring (~27% savings)
+- Webhook endpoint: auto-registered pointing to our `/api/webhook/stripe`
+- Webhook events: `checkout.session.completed`, `customer.subscription.deleted`, `customer.subscription.updated`, `invoice.payment_failed`
+
+**API keys — restricted keys from day one**:
+- Both test AND live mode use restricted keys (catch missing permissions during dev, not launch day)
+- Scoped to ONLY what we need:
+  - Checkout Sessions: write
+  - Customers: read + write
+  - Subscriptions: read
+  - Products + Prices: read + write (for sync script)
+  - Webhook Endpoints: read + write (for sync script)
+  - Customer Portal: write
+- Principle of least privilege — if a key leaks, blast radius is limited
 
 **Implementation**:
 - `POST /api/checkout` → creates Stripe Checkout Session with `client_reference_id = user.id`
@@ -371,8 +415,9 @@ error-decoder/
 - Payment fails after active → keep Pro during Stripe retry period, downgrade only on `subscription.deleted`
 - Duplicate webhook → idempotent handlers, no double-processing
 - User uninstalls but keeps subscription → their problem, portal lets them cancel
+- Sync script run against wrong environment → script checks STRIPE_SECRET_KEY prefix (`sk_test_` vs `sk_live_`) and confirms before modifying live
 
-**Quality gate**: Full checkout flow in test mode. Webhook upgrades/downgrades correctly. Portal works. Signature verification rejects tampered requests.
+**Quality gate**: Sync script creates products/prices/webhooks correctly. Full checkout flow in test mode. Webhook upgrades/downgrades correctly. Portal works. Signature verification rejects tampered requests.
 
 ---
 
