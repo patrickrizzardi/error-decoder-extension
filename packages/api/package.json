@@ -1,0 +1,21 @@
+{
+  "name": "@error-decoder/api",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "bun run --hot src/server.ts",
+    "build": "tsc",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "latest",
+    "@supabase/supabase-js": "latest",
+    "hono": "latest",
+    "stripe": "latest",
+    "valibot": "latest"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "latest"
+  }
+}
