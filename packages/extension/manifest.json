@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "ErrorDecoder — AI Error & Stack Trace Explainer",
+  "version": "1.0.0",
+  "description": "Decode error messages instantly. Select any error, right-click, get AI-powered explanation + fix.",
+  "permissions": ["contextMenus", "storage", "sidePanel", "activeTab"],
+  "host_permissions": [],
+  "background": {
+    "service_worker": "src/background/index.ts"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/index.ts"],
+      "run_at": "document_idle"
+    }
+  ],
+  "side_panel": {
+    "default_path": "src/sidepanel/index.html"
+  },
+  "action": {
+    "default_popup": "src/popup/index.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "options_page": "src/options/index.html",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
+}

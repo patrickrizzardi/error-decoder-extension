@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ErrorDecoder</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <h1>ErrorDecoder</h1>
+
+    <!-- Paste mode -->
+    <div id="paste-mode">
+      <textarea
+        id="error-input"
+        placeholder="Paste your error message or stack trace here..."
+        rows="6"
+      ></textarea>
+      <div id="char-count">
+        <span id="char-current">0</span> / <span id="char-limit">1,000</span>
+      </div>
+      <button id="decode-btn">Decode</button>
+    </div>
+
+    <!-- Quick stats -->
+    <div id="stats">
+      <span id="usage-display"></span>
+    </div>
+
+    <!-- Links -->
+    <div id="links">
+      <a id="upgrade-link" href="#" class="hidden">Upgrade to Pro →</a>
+      <a id="account-link" href="#" target="_blank">Account</a>
+    </div>
+
+    <p class="hint">Or select text on any page → right-click → Decode this error</p>
+  </div>
+
+  <script src="index.ts" type="module"></script>
+</body>
+</html>

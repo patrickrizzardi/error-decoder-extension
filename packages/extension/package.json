@@ -1,0 +1,17 @@
+{
+  "name": "@error-decoder/extension",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "vite build --watch",
+    "build": "vite build",
+    "test": "bun test"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@crxjs/vite-plugin": "latest",
+    "@types/chrome": "latest",
+    "typescript": "latest",
+    "vite": "latest"
+  }
+}

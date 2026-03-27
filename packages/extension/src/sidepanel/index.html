@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ErrorDecoder</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Empty state -->
+    <div id="empty-state" class="state">
+      <h2>ErrorDecoder</h2>
+      <p>Select any error text on a page, right-click, and choose "Decode this error".</p>
+    </div>
+
+    <!-- Loading state -->
+    <div id="loading-state" class="state hidden">
+      <div class="skeleton-block"></div>
+      <div class="skeleton-block short"></div>
+      <div class="skeleton-block"></div>
+      <div class="skeleton-block short"></div>
+    </div>
+
+    <!-- Result state -->
+    <div id="result-state" class="state hidden">
+      <section id="what-happened">
+        <h3>What Happened</h3>
+        <p id="what-happened-text"></p>
+      </section>
+
+      <section id="why">
+        <h3>Why This Occurs</h3>
+        <ul id="why-list"></ul>
+      </section>
+
+      <section id="how-to-fix">
+        <h3>How to Fix</h3>
+        <ol id="fix-list"></ol>
+      </section>
+
+      <section id="code-example" class="hidden">
+        <h3>Code Example</h3>
+        <div id="code-before" class="code-block hidden">
+          <span class="code-label">Before</span>
+          <pre><code id="code-before-text"></code></pre>
+        </div>
+        <div id="code-after" class="code-block">
+          <span class="code-label">After</span>
+          <pre><code id="code-after-text"></code></pre>
+          <button id="copy-code" class="copy-btn">Copy</button>
+        </div>
+      </section>
+
+      <div id="feedback">
+        <span>Was this helpful?</span>
+        <button id="thumbs-up" class="feedback-btn">👍</button>
+        <button id="thumbs-down" class="feedback-btn">👎</button>
+        <span id="feedback-thanks" class="hidden">Thanks!</span>
+      </div>
+    </div>
+
+    <!-- Error state -->
+    <div id="error-state" class="state hidden">
+      <p id="error-message"></p>
+      <button id="retry-btn" class="hidden">Try Again</button>
+    </div>
+
+    <!-- Footer -->
+    <footer id="footer">
+      <span id="usage-text"></span>
+      <a id="upgrade-link" href="#" class="hidden">Upgrade to Pro</a>
+    </footer>
+  </div>
+
+  <script src="index.ts" type="module"></script>
+</body>
+</html>
