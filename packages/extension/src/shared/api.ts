@@ -7,7 +7,12 @@ import type {
 } from "@shared/types";
 import { storage } from "./storage";
 
-const API_BASE = "http://localhost:5000/api";
+// In dev: localhost. In production: errordecoder.dev
+// Set at build time via build.ts define
+const API_BASE =
+  typeof __API_BASE__ !== "undefined"
+    ? __API_BASE__
+    : "http://localhost:5000/api";
 
 const getHeaders = async (): Promise<HeadersInit> => {
   const apiKey = await storage.get("apiKey");

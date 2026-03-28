@@ -7,26 +7,41 @@ chrome.runtime.onInstalled.addListener(() => {
     title: "Decode this error",
     contexts: ["selection"],
   });
+
+  // Enable side panel to open on action click as well
+  if (chrome.sidePanel?.setPanelBehavior) {
+    chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+  }
 });
 
 // Handle context menu click
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId !== "decode-error" || !info.selectionText) return;
 
-  // Store selected text in session storage for side panel to read
+  // Store selected text for side panel to read
   await chrome.storage.session.set({
     pendingDecode: info.selectionText,
     pendingTabId: tab?.id,
     pendingUrl: tab?.url,
   });
 
-  // Open side panel
-  if (tab?.windowId) {
-    await chrome.sidePanel.open({ windowId: tab.windowId });
+  // Try to open side panel
+  if (chrome.sidePanel?.open && tab?.windowId) {
+    try {
+      await chrome.sidePanel.open({ windowId: tab.windowId });
+      console.log("[BG] Side panel opened");
+      return;
+    } catch (err) {
+      console.warn("[BG] Side panel failed, falling back to tab:", err);
+    }
   }
+
+  // Fallback: open results in a new tab
+  const resultUrl = chrome.runtime.getURL("sidepanel/index.html");
+  chrome.tabs.create({ url: resultUrl });
 });
 
-// Listen for messages from content script (page context)
+// Listen for messages from content script / auth page
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === "PAGE_CONTEXT") {
     chrome.storage.session.set({ pageContext: JSON.stringify(message.data) });
@@ -34,7 +49,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (message.type === "AUTH_SUCCESS") {
-    // Store API key from auth flow
     chrome.storage.local.set({
       apiKey: message.apiKey,
       userEmail: message.email,
@@ -43,5 +57,5 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     sendResponse({ received: true });
   }
 
-  return true; // Keep message channel open for async response
+  return true;
 });

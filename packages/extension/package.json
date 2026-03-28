@@ -3,15 +3,13 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
-    "dev": "vite build --watch",
-    "build": "vite build",
+    "dev": "bun run --watch build.ts",
+    "build": "bun run build.ts",
     "test": "bun test"
   },
   "dependencies": {},
   "devDependencies": {
-    "@crxjs/vite-plugin": "latest",
     "@types/chrome": "latest",
-    "typescript": "latest",
-    "vite": "latest"
+    "typescript": "latest"
   }
 }
