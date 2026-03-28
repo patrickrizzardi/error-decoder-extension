@@ -42,13 +42,36 @@ body {
   line-height: 1.5;
   color: var(--text);
   background: var(--bg);
-  padding: 12px;
-  width: 100%;
+  padding: 40px 12px 12px;
+  max-width: 640px;
+  margin: 0 auto;
   min-height: 100vh;
 }
 
 .hidden {
   display: none !important;
+}
+
+/* Close button */
+.close-btn {
+  position: fixed;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  font-size: 18px;
+  line-height: 1;
+  border-radius: 4px;
+  cursor: pointer;
+  z-index: 10;
+}
+
+.close-btn:hover {
+  color: var(--text);
+  background: var(--border);
 }
 
 h2 {
@@ -169,12 +192,8 @@ code {
 
 /* Footer */
 footer {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 8px 12px;
-  background: var(--bg);
+  padding: 12px 0;
+  margin-top: 24px;
   border-top: 1px solid var(--border);
   font-size: 11px;
   color: var(--text-muted);

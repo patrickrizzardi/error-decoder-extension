@@ -89,6 +89,12 @@ document.getElementById("copy-code")?.addEventListener("click", async () => {
 // Retry button
 document.getElementById("retry-btn")?.addEventListener("click", checkPendingDecode);
 
+// Close panel — tell parent page to hide the iframe
+document.getElementById("close-panel")?.addEventListener("click", () => {
+  // Send message to parent page's content script via background
+  window.parent.postMessage({ type: "ERRORDECODER_CLOSE" }, "*");
+});
+
 // Feedback buttons
 document.getElementById("thumbs-up")?.addEventListener("click", () => {
   document.getElementById("feedback-thanks")!.classList.remove("hidden");
