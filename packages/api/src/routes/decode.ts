@@ -107,11 +107,29 @@ decodeRoute.post("/", authMiddleware, rateLimitMiddleware, async (c) => {
 
     const responseTimeMs = Date.now() - startTime;
     const textContent = completion.content.find((c) => c.type === "text");
-    const rawText = textContent?.text ?? "";
+    let rawText = textContent?.text ?? "";
+
+    // Strip markdown code fences if present
+    rawText = rawText.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+
+    // If still not valid JSON, try to extract JSON object from the text
+    const extractJson = (text: string): string => {
+      // Try the text as-is first
+      try { JSON.parse(text); return text; } catch {}
+      // Look for first { to last }
+      const start = text.indexOf("{");
+      const end = text.lastIndexOf("}");
+      if (start !== -1 && end > start) {
+        return text.slice(start, end + 1);
+      }
+      return text;
+    };
+
+    const jsonText = extractJson(rawText);
 
     // Parse AI response
     try {
-      const parsed = JSON.parse(rawText);
+      const parsed = JSON.parse(jsonText);
       response = {
         whatHappened: parsed.whatHappened ?? "Unable to parse error",
         why: Array.isArray(parsed.why) ? parsed.why : [],
@@ -123,7 +141,8 @@ decodeRoute.post("/", authMiddleware, rateLimitMiddleware, async (c) => {
         cached: false,
       };
     } catch {
-      // AI didn't return valid JSON — wrap raw text as whatHappened
+      // Genuinely unparseable — wrap raw text
+      console.error("[Decode] Failed to parse AI response as JSON:", rawText.slice(0, 200));
       response = {
         whatHappened: rawText.slice(0, 500),
         why: [],
@@ -144,8 +163,8 @@ decodeRoute.post("/", authMiddleware, rateLimitMiddleware, async (c) => {
     const costCents =
       (inputTokens * rates.input + outputTokens * rates.output) / 1_000_000 * 100;
 
-    // Cache if eligible
-    if (isCacheable) {
+    // Cache if eligible — only cache well-parsed responses
+    if (isCacheable && response.confidence !== "low") {
       cacheUtils.set(errorHash, response).catch((err) => {
         console.error("[Cache] Write failed:", err);
       });
