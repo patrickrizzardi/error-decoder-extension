@@ -1,5 +1,7 @@
-// Content script — lightweight, runs on every page
-// Detects page context and responds to background worker requests
+// Content script — runs on every page
+// Handles: page context detection, text selection, injected result panel
+
+import { showPanel, hidePanel, isPanelVisible } from "./panel";
 
 const detectFramework = (): string | undefined => {
   if (document.querySelector("[data-reactroot]") || (window as any).__REACT_DEVTOOLS_GLOBAL_HOOK__) return "react";
@@ -12,12 +14,11 @@ const detectFramework = (): string | undefined => {
 };
 
 const detectIsMinified = (text: string): boolean => {
-  // Check for minified stack trace patterns
   const patterns = [
-    /:1:\d+/, // single-line references like :1:4523
-    /[a-f0-9]{8,}\.(js|css)/, // hash filenames like main.a3f8b2c.js
-    /webpack:\/\//, // webpack internal refs
-    /vite:\/\//, // vite internal refs
+    /:1:\d+/,
+    /[a-f0-9]{8,}\.(js|css)/,
+    /webpack:\/\//,
+    /vite:\/\//,
   ];
   return patterns.some((p) => p.test(text));
 };
@@ -32,7 +33,7 @@ const getPageContext = () => ({
     window.location.port !== "",
 });
 
-// Send page context to background when requested
+// Listen for messages from background worker
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === "GET_PAGE_CONTEXT") {
     sendResponse(getPageContext());
@@ -45,6 +46,25 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       isMinified: detectIsMinified(selection),
       ...getPageContext(),
     });
+  }
+
+  if (message.type === "SHOW_PANEL") {
+    showPanel();
+    sendResponse({ shown: true });
+  }
+
+  if (message.type === "HIDE_PANEL") {
+    hidePanel();
+    sendResponse({ hidden: true });
+  }
+
+  if (message.type === "TOGGLE_PANEL") {
+    if (isPanelVisible()) {
+      hidePanel();
+    } else {
+      showPanel();
+    }
+    sendResponse({ visible: isPanelVisible() });
   }
 
   return true;
