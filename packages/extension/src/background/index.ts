@@ -1,4 +1,4 @@
-// Background service worker — handles context menu + side panel
+// Background service worker — handles context menu + panel display
 
 // Register context menu on install
 chrome.runtime.onInstalled.addListener(() => {
@@ -7,38 +7,21 @@ chrome.runtime.onInstalled.addListener(() => {
     title: "Decode this error",
     contexts: ["selection"],
   });
-
-  // Enable side panel to open on action click as well
-  if (chrome.sidePanel?.setPanelBehavior) {
-    chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
-  }
 });
 
 // Handle context menu click
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId !== "decode-error" || !info.selectionText) return;
+  if (info.menuItemId !== "decode-error" || !info.selectionText || !tab?.id) return;
 
-  // Store selected text for side panel to read
+  // Store selected text for the panel to read
   await chrome.storage.session.set({
     pendingDecode: info.selectionText,
-    pendingTabId: tab?.id,
-    pendingUrl: tab?.url,
+    pendingTabId: tab.id,
+    pendingUrl: tab.url,
   });
 
-  // Try to open side panel
-  if (chrome.sidePanel?.open && tab?.windowId) {
-    try {
-      await chrome.sidePanel.open({ windowId: tab.windowId });
-      console.log("[BG] Side panel opened");
-      return;
-    } catch (err) {
-      console.warn("[BG] Side panel failed, falling back to tab:", err);
-    }
-  }
-
-  // Fallback: open results in a new tab
-  const resultUrl = chrome.runtime.getURL("sidepanel/index.html");
-  chrome.tabs.create({ url: resultUrl });
+  // Tell the content script to show the injected panel
+  chrome.tabs.sendMessage(tab.id, { type: "SHOW_PANEL" });
 });
 
 // Listen for messages from content script / auth page
