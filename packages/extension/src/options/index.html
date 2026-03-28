@@ -78,6 +78,16 @@
     <button id="copy-key" style="margin-top: 6px;">Copy Key</button>
   </div>
 
+  <div class="field" id="manual-key-section">
+    <label>Enter API Key Manually</label>
+    <div style="display: flex; gap: 6px; margin-top: 4px;">
+      <input type="text" id="manual-key-input" placeholder="Paste your API key here"
+        style="flex:1; padding: 8px 12px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: monospace; font-size: 13px;">
+      <button id="save-key">Save</button>
+    </div>
+    <div id="save-status" style="font-size: 12px; margin-top: 4px; color: var(--accent);"></div>
+  </div>
+
   <div class="actions">
     <button id="manage-sub">Manage Subscription</button>
     <button id="logout">Log Out</button>
