@@ -1,27 +1,26 @@
 import { Hono } from "hono";
+import * as v from "valibot";
 import { authMiddleware } from "../lib/middleware";
 import { supabase } from "../lib/supabase";
+import { feedbackRequestSchema } from "../schemas/feedback";
 import { errorCodes } from "@shared/types";
 
 export const feedbackRoute = new Hono();
 
 feedbackRoute.post("/", authMiddleware, async (c) => {
   const user = c.get("user");
-  const body = await c.req.json();
+  const rawBody = await c.req.json();
 
-  const { decodeId, thumbsUp } = body;
-
-  if (!decodeId || typeof thumbsUp !== "boolean") {
+  const parsed = v.safeParse(feedbackRequestSchema, rawBody);
+  if (!parsed.success) {
+    const message = parsed.issues[0]?.message ?? "Invalid input";
     return c.json(
-      {
-        error: {
-          message: "decodeId (string) and thumbsUp (boolean) required",
-          code: errorCodes.validationError,
-        },
-      },
+      { error: { message, code: errorCodes.validationError } },
       400
     );
   }
+
+  const { decodeId, thumbsUp } = parsed.output;
 
   const { error } = await supabase
     .from("decodes")

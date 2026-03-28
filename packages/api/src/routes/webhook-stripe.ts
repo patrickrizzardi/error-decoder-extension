@@ -1,9 +1,10 @@
 import { Hono } from "hono";
 import { stripe, STRIPE_WEBHOOK_SECRET } from "../lib/stripe";
+import { supabase } from "../lib/supabase";
 
 export const stripeWebhookRoute = new Hono();
 
-// No auth middleware — uses Stripe signature verification instead
+// No auth middleware — uses Stripe signature verification
 stripeWebhookRoute.post("/", async (c) => {
   const signature = c.req.header("stripe-signature");
 
@@ -27,30 +28,92 @@ stripeWebhookRoute.post("/", async (c) => {
     return c.json({ error: { message: "Invalid signature", code: "INVALID_SIGNATURE" } }, 400);
   }
 
-  // Phase 8: Handle events
   switch (event.type) {
-    case "checkout.session.completed":
-      console.log("[Stripe] Checkout completed:", event.data.object.id);
-      // Set user.plan = 'pro', save stripe IDs
-      break;
+    case "checkout.session.completed": {
+      const session = event.data.object;
+      const userId = session.client_reference_id;
+      const subscriptionId = typeof session.subscription === "string"
+        ? session.subscription
+        : session.subscription?.id;
+      const customerId = typeof session.customer === "string"
+        ? session.customer
+        : session.customer?.id;
 
-    case "customer.subscription.deleted":
-      console.log("[Stripe] Subscription deleted:", event.data.object.id);
-      // Set user.plan = 'free'
-      break;
+      if (userId) {
+        const { error } = await supabase
+          .from("users")
+          .update({
+            plan: "pro",
+            stripe_customer_id: customerId,
+            stripe_subscription_id: subscriptionId,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", userId);
 
-    case "customer.subscription.updated":
-      console.log("[Stripe] Subscription updated:", event.data.object.id);
-      // Sync plan status
+        if (error) {
+          console.error(`[Stripe Webhook] Failed to upgrade user ${userId}:`, error.message);
+        } else {
+          console.log(`[Stripe Webhook] User ${userId} upgraded to Pro`);
+        }
+      }
       break;
+    }
 
-    case "invoice.payment_failed":
-      console.log("[Stripe] Payment failed:", event.data.object.id);
-      // Let Stripe retry — no immediate action
+    case "customer.subscription.deleted": {
+      const subscription = event.data.object;
+      const customerId = typeof subscription.customer === "string"
+        ? subscription.customer
+        : subscription.customer?.id;
+
+      if (customerId) {
+        const { error } = await supabase
+          .from("users")
+          .update({
+            plan: "free",
+            stripe_subscription_id: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("stripe_customer_id", customerId);
+
+        if (error) {
+          console.error(`[Stripe Webhook] Failed to downgrade customer ${customerId}:`, error.message);
+        } else {
+          console.log(`[Stripe Webhook] Customer ${customerId} downgraded to Free`);
+        }
+      }
       break;
+    }
+
+    case "customer.subscription.updated": {
+      const subscription = event.data.object;
+      const customerId = typeof subscription.customer === "string"
+        ? subscription.customer
+        : subscription.customer?.id;
+
+      // Sync plan status based on subscription status
+      const isActive = subscription.status === "active" || subscription.status === "trialing";
+
+      if (customerId) {
+        await supabase
+          .from("users")
+          .update({
+            plan: isActive ? "pro" : "free",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("stripe_customer_id", customerId);
+      }
+      break;
+    }
+
+    case "invoice.payment_failed": {
+      const invoice = event.data.object;
+      console.log(`[Stripe Webhook] Payment failed for invoice ${invoice.id}. Stripe will retry.`);
+      // Stripe retries 3 times over ~3 weeks. No immediate action needed.
+      break;
+    }
 
     default:
-      console.log(`[Stripe] Unhandled event type: ${event.type}`);
+      console.log(`[Stripe Webhook] Unhandled event: ${event.type}`);
   }
 
   return c.json({ received: true });

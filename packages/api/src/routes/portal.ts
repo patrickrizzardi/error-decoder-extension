@@ -20,11 +20,10 @@ portalRoute.post("/", authMiddleware, async (c) => {
     );
   }
 
-  // Phase 8: Create Stripe Customer Portal session
-  return c.json({
-    data: {
-      message: "Portal — Phase 8. Will create Stripe Portal Session.",
-      customerId: user.stripeCustomerId,
-    },
+  const session = await stripe.billingPortal.sessions.create({
+    customer: user.stripeCustomerId,
+    return_url: "https://errordecoder.dev",
   });
+
+  return c.json({ data: { url: session.url } });
 });
