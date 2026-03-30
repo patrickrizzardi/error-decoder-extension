@@ -70,37 +70,19 @@ decodeBatchRoute.post("/", authMiddleware, async (c) => {
     });
 
     const responseTimeMs = Date.now() - startTime;
-    let rawText = completion.content.find((c) => c.type === "text")?.text ?? "";
+    const markdown = completion.content.find((c) => c.type === "text")?.text ?? "No response.";
 
-    // Strip markdown fences
-    rawText = rawText.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
-
-    // Extract JSON
-    const start = rawText.indexOf("{");
-    const end = rawText.lastIndexOf("}");
-    if (start !== -1 && end > start) {
-      rawText = rawText.slice(start, end + 1);
-    }
-
-    let result;
-    try {
-      result = JSON.parse(rawText);
-    } catch {
-      result = { summary: rawText.slice(0, 500), rootCause: "Unable to parse AI response", groups: [], unrelatedErrors: [], confidence: "low" };
-    }
-
-    // Log cost
     const inputTokens = completion.usage.input_tokens;
     const outputTokens = completion.usage.output_tokens;
     const rates = modelName === "sonnet" ? { input: 3.0, output: 15.0 } : { input: 1.0, output: 5.0 };
     const costCents = (inputTokens * rates.input + outputTokens * rates.output) / 1_000_000 * 100;
 
-    // Log to decodes table
+    // Log
     supabase.from("decodes").insert({
       user_id: user.id,
       error_text_hash: "batch",
       error_text_preview: `Batch: ${errors.length} errors`,
-      response: result,
+      response: { markdown },
       model_used: modelName,
       input_tokens: inputTokens,
       output_tokens: outputTokens,
@@ -112,7 +94,7 @@ decodeBatchRoute.post("/", authMiddleware, async (c) => {
       if (error) console.error("[Batch Decode] Log failed:", error.message);
     });
 
-    return c.json({ data: result });
+    return c.json({ data: { markdown, model: modelName, cached: false } });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error(`[Batch Decode] Error: ${message}`);
