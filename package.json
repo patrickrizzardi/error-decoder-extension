@@ -13,5 +13,8 @@
     "db:migrate": "bun run scripts/db-migrate.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "marked": "^17.0.5"
   }
 }
