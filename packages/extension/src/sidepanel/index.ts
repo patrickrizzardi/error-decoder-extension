@@ -1,6 +1,8 @@
 // Sidebar — tabbed debugging dashboard
 // Tabs: Errors (feed) | Decode (paste + model picker) | Inspect (element AI)
 
+import { marked } from "marked";
+
 type CapturedError = {
   text: string;
   level: string;
@@ -370,7 +372,7 @@ const decodeSingle = async (errorText: string, model: "haiku" | "sonnet") => {
       return;
     }
 
-    renderSingleResult(json.data, decodeResult);
+    renderMarkdown(json.data.markdown, decodeResult);
   } catch {
     decodeResult.innerHTML = `<p style="color: var(--error-red);">Failed to connect to API.</p>`;
   } finally {
@@ -413,7 +415,7 @@ const decodeBatch = async (errors: CapturedError[]) => {
       return;
     }
 
-    renderBatchResult(json.data, decodeResult);
+    renderMarkdown(json.data.markdown, decodeResult);
   } catch {
     decodeResult.innerHTML = `<p style="color: var(--error-red);">Failed to connect to API.</p>`;
   } finally {
@@ -495,7 +497,8 @@ const showInspectResult = (el: any) => {
   if (el.cssRules?.length) {
     info += `\nCSS rules:\n`;
     for (const rule of el.cssRules.slice(-5)) {
-      info += `  ${rule.selector} (${rule.file})\n`;
+      const source = rule.originalFile ? `→ ${rule.originalFile}` : rule.file;
+      info += `  ${rule.selector} (${source})\n`;
     }
   }
 
@@ -513,9 +516,12 @@ inspectAskBtn.addEventListener("click", async () => {
   const { selectedElement } = await chrome.storage.session.get("selectedElement");
   if (!selectedElement) return;
 
-  // Build CSS rules context
+  // Build CSS rules context — include original file if resolved
   const cssRulesText = (selectedElement.cssRules || [])
-    .map((r: any) => `  ${r.selector} (${r.file}): ${r.properties}`)
+    .map((r: any) => {
+      const source = r.originalFile ? `${r.originalFile} (bundled in ${r.file})` : r.file;
+      return `  ${r.selector} → ${source}: ${r.properties}`;
+    })
     .join("\n");
 
   const prompt = `User asks: "${question}"
@@ -547,7 +553,7 @@ ${selectedElement.outerHTML}${getTechContext()}`;
     const response = await fetch(`${apiBase}/decode`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ errorText: prompt }),
+      body: JSON.stringify({ errorText: prompt, mode: "inspect" }),
     });
 
     const json = await response.json();
@@ -556,7 +562,7 @@ ${selectedElement.outerHTML}${getTechContext()}`;
       return;
     }
 
-    renderSingleResult(json.data, inspectResult, "inspect");
+    renderMarkdown(json.data.markdown, inspectResult);
   } catch {
     inspectResult.innerHTML = `<p style="color: var(--error-red);">Failed to connect to API.</p>`;
   } finally {
@@ -573,48 +579,55 @@ document.getElementById("inspect-question")!.addEventListener("keydown", (e) => 
 // Render helpers
 // ============================================
 
-const renderSingleResult = (data: any, container: HTMLElement, mode: "error" | "inspect" = "error") => {
-  const labels = mode === "inspect"
-    ? { main: "Answer", detail: "Details", fix: "Steps" }
-    : { main: "What Happened", detail: "Why", fix: "How to Fix" };
+// Render markdown response with copy buttons on code blocks
+const renderMarkdown = (markdown: string, container: HTMLElement) => {
+  container.innerHTML = marked.parse(markdown) as string;
 
-  let html = "";
-  html += `<h3>${labels.main}</h3><p>${escapeHtml(data.whatHappened)}</p>`;
-  if (data.why?.length) html += `<h3>${labels.detail}</h3><ul>${data.why.map((r: string) => `<li>${escapeHtml(r)}</li>`).join("")}</ul>`;
-  if (data.howToFix?.length) html += `<h3>${labels.fix}</h3><ol>${data.howToFix.map((f: string) => `<li>${escapeHtml(f)}</li>`).join("")}</ol>`;
-  if (data.codeExample) {
-    html += `<h3>Code Example</h3>`;
-    if (data.codeExample.before) {
-      html += `<div class="code-label-tag">Before</div>`;
-      html += `<div class="code-block"><pre><code>${escapeHtml(data.codeExample.before)}</code></pre></div>`;
-    }
-    html += `<div class="code-label-tag">${data.codeExample.before ? "After" : "Fix"}</div>`;
-    html += `<div class="code-block"><pre><code>${escapeHtml(data.codeExample.after)}</code></pre><button class="copy-btn" onclick="navigator.clipboard.writeText(this.previousElementSibling.textContent);this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',2000)">Copy</button></div>`;
-  }
-  container.innerHTML = html;
+  // Add copy buttons to all code blocks
+  container.querySelectorAll("pre").forEach((pre) => {
+    const wrapper = document.createElement("div");
+    wrapper.className = "code-block";
+    pre.parentNode?.insertBefore(wrapper, pre);
+    wrapper.appendChild(pre);
+
+    const btn = document.createElement("button");
+    btn.className = "copy-btn";
+    btn.textContent = "Copy";
+    btn.addEventListener("click", async () => {
+      const code = pre.textContent || "";
+      await navigator.clipboard.writeText(code);
+      btn.textContent = "Copied!";
+      setTimeout(() => { btn.textContent = "Copy"; }, 2000);
+    });
+    wrapper.appendChild(btn);
+  });
 };
 
-const renderBatchResult = (data: any, container: HTMLElement) => {
-  let html = "";
-  if (data.summary) html += `<h3>Summary</h3><p>${escapeHtml(data.summary)}</p>`;
-  if (data.rootCause) html += `<h3>Root Cause</h3><p>${escapeHtml(data.rootCause)}</p>`;
-  if (data.groups?.length) {
-    for (const group of data.groups) {
-      html += `<h3>🔗 ${escapeHtml(group.name)}</h3>`;
-      html += `<p style="font-size:10px;color:var(--text-muted);">Errors: ${(group.relatedErrors || []).map((n: number) => `#${n}`).join(", ")}</p>`;
-      html += `<p>${escapeHtml(group.explanation)}</p>`;
-      if (group.howToFix?.length) html += `<ol>${group.howToFix.map((f: string) => `<li>${escapeHtml(f)}</li>`).join("")}</ol>`;
-      if (group.codeExample) html += `<div class="code-block"><pre><code>${escapeHtml(group.codeExample.after || "")}</code></pre></div>`;
-    }
-  }
-  if (data.unrelatedErrors?.length) {
-    html += `<h3>Other Errors</h3>`;
-    for (const err of data.unrelatedErrors) {
-      html += `<p><strong>#${err.errorIndex}:</strong> ${escapeHtml(err.explanation)}</p>`;
-      if (err.howToFix?.length) html += `<ol>${err.howToFix.map((f: string) => `<li>${escapeHtml(f)}</li>`).join("")}</ol>`;
-    }
-  }
-  container.innerHTML = html;
+// Basic markdown to HTML fallback (no external lib needed)
+const basicMarkdownToHtml = (md: string): string => {
+  return md
+    // Code blocks
+    .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code class="language-$1">$2</code></pre>')
+    // Inline code
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    // Headers
+    .replace(/^### (.+)$/gm, '<h4>$1</h4>')
+    .replace(/^## (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^# (.+)$/gm, '<h2>$1</h2>')
+    // Bold
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    // Italic
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    // Unordered lists
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    // Ordered lists
+    .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
+    // Wrap consecutive <li> in <ul>
+    .replace(/((?:<li>.*<\/li>\n?)+)/g, '<ul>$1</ul>')
+    // Paragraphs (lines not already tagged)
+    .replace(/^(?!<[hluop])((?!<).+)$/gm, '<p>$1</p>')
+    // Clean up extra newlines
+    .replace(/\n{2,}/g, '\n');
 };
 
 const escapeHtml = (text: string) =>
