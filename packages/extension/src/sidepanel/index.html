@@ -8,73 +8,94 @@
 </head>
 <body>
   <div id="app">
-    <button id="close-panel" class="close-btn" title="Close panel">&times;</button>
-
-    <!-- Empty state -->
-    <div id="empty-state" class="state">
-      <h2>ErrorDecoder</h2>
-      <p>Select any error text on a page, right-click, and choose "Decode this error".</p>
+    <!-- Header -->
+    <div class="header">
+      <span class="logo">ErrorDecoder</span>
+      <span class="status" id="status">Listening...</span>
+      <button id="close-panel" class="icon-btn" title="Close">&times;</button>
     </div>
 
-    <!-- Loading state -->
-    <div id="loading-state" class="state hidden">
-      <div class="skeleton-block"></div>
-      <div class="skeleton-block short"></div>
-      <div class="skeleton-block"></div>
-      <div class="skeleton-block short"></div>
+    <!-- Tech stack badges -->
+    <div id="tech-bar" class="tech-bar hidden"></div>
+
+    <!-- Tab bar -->
+    <div class="tab-bar">
+      <button class="tab active" data-tab="errors">Errors <span id="error-badge" class="badge hidden">0</span></button>
+      <button class="tab" data-tab="decode">Decode</button>
+      <button class="tab" data-tab="inspect">Inspect</button>
     </div>
 
-    <!-- Result state -->
-    <div id="result-state" class="state hidden">
-      <section id="what-happened">
-        <h3>What Happened</h3>
-        <p id="what-happened-text"></p>
-      </section>
-
-      <section id="why">
-        <h3>Why This Occurs</h3>
-        <ul id="why-list"></ul>
-      </section>
-
-      <section id="how-to-fix">
-        <h3>How to Fix</h3>
-        <ol id="fix-list"></ol>
-      </section>
-
-      <section id="code-example" class="hidden">
-        <h3>Code Example</h3>
-        <div id="code-before" class="code-block hidden">
-          <span class="code-label">Before</span>
-          <pre><code id="code-before-text"></code></pre>
+    <!-- ERRORS TAB — real-time feed -->
+    <div id="tab-errors" class="tab-content active">
+      <div id="error-feed">
+        <div id="empty-state" class="empty">
+          <p>Waiting for errors...</p>
+          <p class="empty-note">Captures console errors, failed network requests, and unhandled exceptions from your code. Some browser-level errors (ad blocker blocks, script parse errors from third-party scripts) may only appear in DevTools Console.</p>
         </div>
-        <div id="code-after" class="code-block">
-          <span class="code-label">After</span>
-          <pre><code id="code-after-text"></code></pre>
-          <button id="copy-code" class="copy-btn">Copy</button>
-        </div>
-      </section>
-
-      <div id="feedback">
-        <span>Was this helpful?</span>
-        <button id="thumbs-up" class="feedback-btn">👍</button>
-        <button id="thumbs-down" class="feedback-btn">👎</button>
-        <span id="feedback-thanks" class="hidden">Thanks!</span>
+      </div>
+      <div id="feed-actions" class="hidden">
+        <button id="decode-selected" class="btn-primary" disabled>Decode Selected</button>
+        <button id="decode-all" class="btn-secondary">Decode All</button>
+        <button id="clear-errors" class="btn-secondary">Clear</button>
       </div>
     </div>
 
-    <!-- Error state -->
-    <div id="error-state" class="state hidden">
-      <p id="error-message"></p>
-      <button id="retry-btn" class="hidden">Try Again</button>
+    <!-- DECODE TAB — paste/review + model picker + results -->
+    <div id="tab-decode" class="tab-content">
+      <div id="decode-input-area">
+        <textarea id="decode-input" placeholder="Paste an error, or right-click selected text on the page to send it here..." rows="5"></textarea>
+        <div class="model-picker">
+          <button id="decode-haiku" class="btn-primary">Decode (Haiku)</button>
+          <button id="decode-sonnet" class="btn-sonnet hidden" title="Uses Claude Sonnet for deeper analysis">
+            Sonnet <span id="sonnet-remaining"></span>
+          </button>
+        </div>
+      </div>
+      <div id="decode-result"></div>
+    </div>
+
+    <!-- INSPECT TAB — element inspector -->
+    <div id="tab-inspect" class="tab-content">
+      <div id="inspect-start">
+        <button id="inspect-btn" class="btn-primary">🔍 Click to inspect an element</button>
+        <button id="inspect-cancel" class="btn-secondary hidden">Cancel (ESC)</button>
+        <p class="hint">Hover over any element on the page, click to select. Press ESC to cancel.</p>
+      </div>
+      <div id="inspect-selected" class="hidden">
+        <div class="inspect-toolbar">
+          <button id="inspect-new" class="btn-secondary">🔍 Inspect new element</button>
+        </div>
+        <div id="element-info"></div>
+        <div class="inspect-ask">
+          <input type="text" id="inspect-question" placeholder="How do I center this? Make it bigger? What does this do?" />
+          <button id="inspect-ask-btn" class="btn-primary">Ask</button>
+        </div>
+        <div id="inspect-result"></div>
+      </div>
+    </div>
+
+    <!-- RESULT OVERLAY — shown over any tab when decoding -->
+    <div id="result-overlay" class="hidden">
+      <div class="result-header">
+        <span id="result-title">AI Analysis</span>
+        <button id="back-from-result" class="icon-btn" title="Back">&larr;</button>
+      </div>
+      <div id="result-loading" class="hidden">
+        <div class="skeleton"></div>
+        <div class="skeleton short"></div>
+        <div class="skeleton"></div>
+        <div class="skeleton short"></div>
+      </div>
+      <div id="result-content"></div>
     </div>
 
     <!-- Footer -->
-    <footer id="footer">
-      <span id="usage-text"></span>
-      <a id="upgrade-link" href="#" class="hidden">Upgrade to Pro</a>
-    </footer>
+    <div class="footer">
+      <span id="error-count">0 errors</span>
+      <a id="settings-link" href="#">Settings</a>
+    </div>
   </div>
 
-  <script src="index.ts" type="module"></script>
+  <script src="index.js"></script>
 </body>
 </html>
