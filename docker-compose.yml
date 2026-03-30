@@ -10,20 +10,15 @@ services:
       - .:/app
     env_file: .env
     command: sh -c "bun install && bun run --hot packages/api/src/server.ts"
-    networks:
-      error-decoder-network:
-        ipv4_address: 10.9.1.2
 
   stripe:
     image: stripe/stripe-cli:v1.12.0
     container_name: error-decoder-stripe
     restart: unless-stopped
-    command: "listen --api-key ${STRIPE_SECRET_KEY} --forward-to 10.9.1.2:5000/api/webhook/stripe"
+    command: "listen --api-key ${STRIPE_SECRET_KEY} --forward-to error-decoder-api:5000/api/webhook/stripe"
     env_file: .env
     volumes:
       - stripe-data:/stripe
-    networks:
-      - error-decoder-network
 
   web:
     image: oven/bun:1
@@ -34,18 +29,8 @@ services:
       - "4000:4000"
     volumes:
       - .:/app
-      - /app/node_modules
     env_file: .env
     command: sh -c "bun install && bun run --hot packages/web/src/server.ts"
-    networks:
-      - error-decoder-network
 
 volumes:
   stripe-data:
-
-networks:
-  error-decoder-network:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 10.9.1.0/24
