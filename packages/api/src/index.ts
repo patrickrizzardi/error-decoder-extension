@@ -9,6 +9,7 @@ import { portalRoute } from "./routes/portal";
 import { stripeWebhookRoute } from "./routes/webhook-stripe";
 import { feedbackRoute } from "./routes/feedback";
 import { accountRoute } from "./routes/account";
+import { decodeBatchRoute } from "./routes/decode-batch";
 import { errorHandler } from "./lib/error-handler";
 
 const app = new Hono().basePath("/api");
@@ -33,6 +34,7 @@ app.onError(errorHandler);
 // Routes
 app.route("/health", healthRoute);
 app.route("/decode", decodeRoute);
+app.route("/decode-batch", decodeBatchRoute);
 app.route("/usage", usageRoute);
 app.route("/auth", authRoutes);
 app.route("/checkout", checkoutRoute);
