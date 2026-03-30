@@ -51,10 +51,14 @@ export const authMiddleware = async (c: Context, next: Next) => {
     );
   }
 
+  // Admin emails always get Pro — no Stripe needed
+  const adminEmails = (process.env.ADMIN_EMAILS ?? "").split(",").map((e) => e.trim()).filter(Boolean);
+  const plan = adminEmails.includes(user.email) ? "pro" : user.plan;
+
   c.set("user", {
     id: user.id,
     email: user.email,
-    plan: user.plan,
+    plan,
     stripeCustomerId: user.stripe_customer_id,
   });
 

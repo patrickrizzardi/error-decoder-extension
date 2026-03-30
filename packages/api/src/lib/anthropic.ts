@@ -10,5 +10,5 @@ export const anthropic = new Anthropic({ apiKey });
 
 export const models = {
   haiku: "claude-haiku-4-5-20251001",
-  sonnet: "claude-sonnet-4-6-20250514",
+  sonnet: "claude-sonnet-4-6",
 } as const;
