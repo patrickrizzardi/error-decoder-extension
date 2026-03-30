@@ -23,15 +23,51 @@
       <button id="decode-btn">Decode</button>
     </div>
 
-    <!-- Quick stats -->
-    <div id="stats">
-      <span id="usage-display"></span>
+    <!-- Loading state -->
+    <div id="loading-state" class="hidden">
+      <div class="skeleton-block"></div>
+      <div class="skeleton-block short"></div>
+      <div class="skeleton-block"></div>
+    </div>
+
+    <!-- Result state -->
+    <div id="result-state" class="hidden">
+      <section>
+        <h3>What Happened</h3>
+        <p id="what-happened-text"></p>
+      </section>
+
+      <section>
+        <h3>Why This Occurs</h3>
+        <ul id="why-list"></ul>
+      </section>
+
+      <section>
+        <h3>How to Fix</h3>
+        <ol id="fix-list"></ol>
+      </section>
+
+      <section id="code-example" class="hidden">
+        <h3>Code Example</h3>
+        <div class="code-block">
+          <pre><code id="code-after-text"></code></pre>
+          <button id="copy-code" class="copy-btn">Copy</button>
+        </div>
+      </section>
+
+      <button id="new-decode-btn" class="secondary-btn">Decode Another</button>
+    </div>
+
+    <!-- Error state -->
+    <div id="error-state" class="hidden">
+      <p id="error-message" class="error-text"></p>
+      <button id="retry-btn" class="secondary-btn">Try Again</button>
     </div>
 
     <!-- Links -->
     <div id="links">
-      <a id="upgrade-link" href="#" class="hidden">Upgrade to Pro →</a>
-      <a id="account-link" href="#" target="_blank">Account</a>
+      <a id="upgrade-link" href="#" class="hidden">Upgrade to Pro</a>
+      <a id="account-link" href="#">Account</a>
     </div>
 
     <p class="hint">Or select text on any page → right-click → Decode this error</p>
