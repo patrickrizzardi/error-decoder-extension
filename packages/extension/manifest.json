@@ -1,14 +1,25 @@
 {
   "manifest_version": 3,
-  "name": "ErrorDecoder — AI Error & Stack Trace Explainer",
+  "name": "ErrorDecoder — AI Debugging Sidebar",
   "version": "1.0.0",
-  "description": "Decode error messages instantly. Select any error, right-click, get AI-powered explanation + fix.",
-  "permissions": ["contextMenus", "storage", "sidePanel", "activeTab"],
-  "host_permissions": [],
+  "description": "Always-on debugging sidebar. Real-time error stream, network monitoring, element inspection, AI-powered fixes.",
+  "permissions": ["contextMenus", "storage", "sidePanel", "activeTab", "webRequest"],
+  "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "src/background/index.ts"
   },
   "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/capture/main-world.ts"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/relay.ts"],
+      "run_at": "document_start"
+    },
     {
       "matches": ["<all_urls>"],
       "js": ["src/content/index.ts"],
@@ -19,13 +30,13 @@
     "default_path": "src/sidepanel/index.html"
   },
   "action": {
-    "default_popup": "src/popup/index.html",
     "default_icon": {
       "16": "icons/icon-16.png",
       "48": "icons/icon-48.png",
       "128": "icons/icon-128.png"
     }
   },
+  "devtools_page": "devtools/devtools.html",
   "options_page": "src/options/index.html",
   "icons": {
     "16": "icons/icon-16.png",
