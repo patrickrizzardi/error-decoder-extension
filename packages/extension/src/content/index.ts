@@ -1,70 +1,61 @@
-// Content script — runs on every page
-// Handles: page context detection, text selection, injected result panel
+// Content script — runs on every page (ISOLATED world)
+// Error relay handled by relay.ts (document_start)
+// This script: panel UI, inspector, tech detection, source map resolution
 
 import { showPanel, hidePanel, isPanelVisible } from "./panel";
+import { startInspecting, stopInspecting } from "./inspector";
+import { detectTechStack } from "./tech-detect";
+import { resolveStackTrace } from "./sourcemap";
 
-const detectFramework = (): string | undefined => {
-  if (document.querySelector("[data-reactroot]") || (window as any).__REACT_DEVTOOLS_GLOBAL_HOOK__) return "react";
-  if ((window as any).__VUE__) return "vue";
-  if (document.querySelector("[ng-version]")) return "angular";
-  if ((window as any).__NEXT_DATA__) return "nextjs";
-  if ((window as any).__NUXT__) return "nuxt";
-  if ((window as any).__SVELTE_HMR) return "svelte";
-  return undefined;
+// Run tech detection after page loads, store for sidebar
+const runTechDetection = () => {
+  // Wait a bit for the main world script to populate globals
+  setTimeout(() => {
+    const tech = detectTechStack();
+    chrome.runtime.sendMessage({
+      type: "TECH_DETECTED",
+      tech,
+    }).catch(() => {});
+  }, 1500);
 };
 
-const detectIsMinified = (text: string): boolean => {
-  const patterns = [
-    /:1:\d+/,
-    /[a-f0-9]{8,}\.(js|css)/,
-    /webpack:\/\//,
-    /vite:\/\//,
-  ];
-  return patterns.some((p) => p.test(text));
-};
-
-const getPageContext = () => ({
-  url: window.location.href,
-  domain: window.location.hostname,
-  framework: detectFramework(),
-  isDev:
-    window.location.hostname === "localhost" ||
-    window.location.hostname === "127.0.0.1" ||
-    window.location.port !== "",
-});
+if (document.readyState === "complete") {
+  runTechDetection();
+} else {
+  window.addEventListener("load", runTechDetection);
+}
 
 // Listen for messages from background worker
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === "GET_PAGE_CONTEXT") {
-    sendResponse(getPageContext());
-  }
-
-  if (message.type === "GET_SELECTION") {
-    const selection = window.getSelection()?.toString()?.trim() ?? "";
+    const tech = detectTechStack();
     sendResponse({
-      text: selection,
-      isMinified: detectIsMinified(selection),
-      ...getPageContext(),
+      url: window.location.href,
+      domain: window.location.hostname,
+      tech,
+      isDev:
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1" ||
+        window.location.port !== "",
     });
   }
-
-  if (message.type === "SHOW_PANEL") {
-    showPanel();
-    sendResponse({ shown: true });
-  }
-
-  if (message.type === "HIDE_PANEL") {
-    hidePanel();
-    sendResponse({ hidden: true });
-  }
-
+  if (message.type === "SHOW_PANEL") { showPanel(); sendResponse({ shown: true }); }
+  if (message.type === "HIDE_PANEL") { hidePanel(); sendResponse({ hidden: true }); }
   if (message.type === "TOGGLE_PANEL") {
-    if (isPanelVisible()) {
-      hidePanel();
-    } else {
-      showPanel();
-    }
+    if (isPanelVisible()) hidePanel(); else showPanel();
     sendResponse({ visible: isPanelVisible() });
+  }
+  if (message.type === "START_INSPECT") { startInspecting(); sendResponse({ started: true }); }
+  if (message.type === "STOP_INSPECT") { stopInspecting(); sendResponse({ stopped: true }); }
+
+  // Resolve source maps for a stack trace
+  if (message.type === "RESOLVE_SOURCEMAP") {
+    resolveStackTrace(message.errorText).then((resolved) => {
+      sendResponse({ resolved });
+    }).catch(() => {
+      sendResponse({ resolved: message.errorText }); // Return original on failure
+    });
+    return true; // Keep channel open for async response
   }
 
   return true;
