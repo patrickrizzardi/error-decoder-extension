@@ -25,6 +25,9 @@ export const storage = {
   },
 };
 
+export const getApiKey = (): Promise<string | null> =>
+  storage.get("apiKey").then((key) => key || null);
+
 // Session storage — cleared when browser closes
 export const sessionStorage = {
   get: async (key: string): Promise<string | undefined> => {

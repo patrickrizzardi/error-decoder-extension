@@ -7,9 +7,11 @@ import type {
 } from "@shared/types";
 import { storage } from "./storage";
 
+declare const __API_BASE__: string;
+
 // In dev: localhost. In production: errordecoder.dev
 // Set at build time via build.ts define
-const API_BASE =
+export const API_BASE =
   typeof __API_BASE__ !== "undefined"
     ? __API_BASE__
     : "http://localhost:4001/api";

@@ -110,6 +110,18 @@ export type ExtensionStorage = {
   userPlan?: UserPlan;
 };
 
+// --- Captured Error (console/network interceptors) ---
+
+export type CapturedError = {
+  text: string;
+  level: string;
+  timestamp: number;
+  url?: string;
+  domain?: string;
+  source?: string;
+  tabId?: number;
+};
+
 // --- Stripe Setup Config ---
 
 export type StripeProductConfig = {
