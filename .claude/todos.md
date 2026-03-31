@@ -44,6 +44,16 @@ Build an always-on AI debugging sidebar Chrome extension. Real-time error stream
 - [x] Valibot validation on all endpoints
 - [x] CORS, auth middleware, rate limiting
 
+## Code Audit ✅ COMPLETE (2026-03-30)
+- [x] A.1 Ran 8 analyzers (bugs, perf, cleanup, redundancy, consistency, consolidation, docs, UX)
+- [x] A.2 Verified all findings manually — confirmed 30+, rejected 4 false positives
+- [x] A.3 Fixed critical bugs: appendCapturedError race condition, inspect session killer, escapeHtml crash, message listener return true, unbounded buffer
+- [x] A.4 DRY consolidation: shared/html.ts, shared/ui.ts, updated storage.ts + api.ts + types.ts, eliminated 5 duplicate definitions
+- [x] A.5 Performance: rAF gating, VLQ lookup table + memoization, Range headers for source maps, CSS rule cap at 500, SPA cache invalidation, parallel builds
+- [x] A.6 Cleanup: removed decodeBatch, basicMarkdownToHtml, togglePanel, orphaned HTML elements
+- [x] A.7 Docs: VLQ algorithm, content script realm architecture, magic constants
+- [x] A.8 UX: focus-visible CSS (WCAG), better empty state text
+
 ## Remaining Phases
 
 ### Phase 4: Auth Flow
@@ -59,8 +69,8 @@ Build an always-on AI debugging sidebar Chrome extension. Real-time error stream
 - [ ] 7.4 Sonnet monthly limit display
 
 ### Phase 9: UI Polish
-- [ ] 9.1 Code cleanup / DRY pass (sidepanel/index.ts is large, inline styles in panel.ts)
-- [ ] 9.2 Final visual polish based on audit findings
+- [x] 9.1 Code cleanup / DRY pass — done via audit
+- [x] 9.2 Final visual polish based on audit findings — done via audit
 
 ### Phase 10: Landing Page
 - [ ] 10.1 Full landing page (hero, how it works, pricing, FAQ)
@@ -84,4 +94,4 @@ Build an always-on AI debugging sidebar Chrome extension. Real-time error stream
 - [ ] 13.1 TODO/FIXME grep
 - [ ] 13.2 Security scan (no secrets in code)
 - [ ] 13.3 Quality checklist pass
-- [ ] 13.4 Code audit findings addressed
+- [x] 13.4 Code audit findings addressed
