@@ -4,15 +4,18 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ErrorDecoder — AI Error Decoder Chrome Extension</title>
-  <meta name="description" content="Instantly decode error messages and stack traces with AI. Right-click any error on any webpage for a plain-English explanation and fix.">
+  <meta name="description" content="AI-powered Chrome extension that catches errors in real-time, explains what went wrong, and shows you the fix. Right on the page. Free tier available.">
+
+  <link rel="canonical" href="https://errordecoder.dev">
+  <link rel="stylesheet" href="styles.css">
 
   <!-- Open Graph -->
   <meta property="og:title" content="ErrorDecoder — AI Error Decoder Chrome Extension">
-  <meta property="og:description" content="Select any error. Right-click. Get an instant AI explanation and fix.">
+  <meta property="og:description" content="Stop Googling error messages. AI-powered sidebar that catches errors in real-time and shows you the fix. Right on the page.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://errordecoder.dev">
 
-  <!-- Structured Data -->
+  <!-- Structured Data: SoftwareApplication -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -22,56 +25,502 @@
     "operatingSystem": "Chrome",
     "offers": [
       { "@type": "Offer", "price": "0", "priceCurrency": "USD", "description": "Free — 3 decodes/day" },
-      { "@type": "Offer", "price": "9", "priceCurrency": "USD", "description": "Pro — Unlimited decodes" }
+      { "@type": "Offer", "price": "9", "priceCurrency": "USD", "description": "Pro — Unlimited decodes, $9/month" },
+      { "@type": "Offer", "price": "79", "priceCurrency": "USD", "description": "Pro — Unlimited decodes, $79/year" }
     ]
   }
   </script>
 
-  <style>
-    /* Phase 10: Full landing page styles. Placeholder for now. */
-    :root {
-      --bg: #0a0a0a;
-      --text: #e4e4e4;
-      --accent: #569cd6;
-    }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      color: var(--text);
-      background: var(--bg);
-      margin: 0;
-      padding: 0;
-    }
-    .hero {
-      max-width: 720px;
-      margin: 80px auto;
-      text-align: center;
-      padding: 0 20px;
-    }
-    h1 { font-size: 48px; line-height: 1.1; margin-bottom: 16px; }
-    .subtitle { font-size: 20px; color: #808080; margin-bottom: 32px; }
-    .cta {
-      display: inline-block;
-      padding: 14px 32px;
-      background: var(--accent);
-      color: white;
-      text-decoration: none;
-      border-radius: 8px;
-      font-size: 18px;
-      font-weight: 600;
-    }
-    .cta:hover { opacity: 0.9; }
-  </style>
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "Is it really free?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes! The free plan includes 3 AI-powered error decodes per day, forever. No credit card required. No trial period."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What data do you collect?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Only the error text you explicitly choose to decode. We never access your source code, browsing history, or any page content you don't select. Error text is processed by Claude AI (Anthropic) and optionally cached to speed up common errors."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does it work offline?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "The error capture and element inspector work without internet. AI-powered decoding requires an internet connection to reach the Claude API."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Which browsers are supported?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Chrome and all Chromium-based browsers — Edge, Brave, Opera, Arc, and Vivaldi."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can it see my source code?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. ErrorDecoder only sees the error message and stack trace text. If source maps are available (dev mode), it maps minified filenames back to originals, but your actual source code stays in your browser."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What AI model powers it?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Claude by Anthropic. Free users get Claude Haiku 4.5 (fast, accurate). Pro users also get access to Claude Sonnet 4.6 for deeper analysis of complex errors — 20 Sonnet decodes per month."
+        }
+      }
+    ]
+  }
+  </script>
 </head>
 <body>
-  <div class="hero">
-    <h1>Stop Googling Error Messages</h1>
-    <p class="subtitle">
-      AI-powered Chrome extension that explains errors and gives you the fix.
-      Select any error. Right-click. Done.
-    </p>
-    <a href="#" class="cta">Add to Chrome — It's Free</a>
-  </div>
 
-  <!-- Phase 10: How it works, error types, pricing, FAQ, footer -->
+  <!-- ==========================================
+       Navigation
+       ========================================== -->
+  <nav class="nav" aria-label="Main navigation">
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="ErrorDecoder home">ErrorDecoder</a>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#pricing">Pricing</a>
+        <a href="#faq">FAQ</a>
+      </div>
+      <a href="#" class="nav-cta" aria-label="Add ErrorDecoder to Chrome for free">Add to Chrome — Free</a>
+    </div>
+  </nav>
+
+  <main>
+
+    <!-- ==========================================
+         Hero
+         ========================================== -->
+    <section class="hero">
+      <div class="container">
+        <span class="hero-eyebrow">Chrome Extension — Free to Start</span>
+        <h1>Stop Googling<br>Error Messages</h1>
+        <p class="hero-subtitle">
+          AI-powered sidebar that catches errors in real-time, explains what went wrong,
+          and shows you the fix. Right on the page.
+        </p>
+        <div class="hero-actions">
+          <a href="#" class="btn-primary" aria-label="Add ErrorDecoder to Chrome for free">
+            ⚡ Add to Chrome — Free
+          </a>
+          <a href="#how-it-works" class="btn-ghost">
+            See how it works ↓
+          </a>
+        </div>
+
+        <!-- Hero Mock Sidebar -->
+        <div class="hero-mock" role="img" aria-label="Preview of ErrorDecoder sidebar decoding a CORS error">
+          <div class="mock-header">
+            <span class="mock-logo">ErrorDecoder</span>
+            <span class="mock-status">React · Next.js · localhost:3000</span>
+          </div>
+          <div class="mock-error-item">
+            <div class="mock-error-label">
+              <span class="mock-dot mock-dot-network"></span>
+              <span class="mock-error-type">CORS Error</span>
+              <span class="mock-error-time">just now</span>
+            </div>
+            <div class="mock-error-text">Access to fetch at 'https://api.example.com/users' from origin 'http://localhost:3000' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present.</div>
+          </div>
+          <div class="mock-decode-section">
+            <div class="mock-decode-title">AI Decode</div>
+            <div class="mock-response">
+              <div class="mock-line">
+                <div class="mock-heading">What Happened</div>
+              </div>
+              <div class="mock-line">
+                <p class="mock-text">Your frontend at <code class="mock-inline-code">localhost:3000</code> is trying to call an API on a different origin. The server at <code class="mock-inline-code">api.example.com</code> isn't sending CORS headers, so the browser blocks the response.</p>
+              </div>
+              <div class="mock-line">
+                <div class="mock-heading">How to Fix</div>
+              </div>
+              <div class="mock-line">
+                <p class="mock-text">Add CORS headers on your API server:</p>
+              </div>
+              <div class="mock-line">
+                <code class="mock-code">Access-Control-Allow-Origin: http://localhost:3000</code>
+              </div>
+              <div class="mock-line">
+                <p class="mock-text">Or if you're using Express:</p>
+              </div>
+              <div class="mock-line">
+                <code class="mock-code">app.use(cors({ origin: 'http://localhost:3000' }))</code>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         Tech Badge Strip
+         ========================================== -->
+    <section class="tech-strip" aria-label="Supported technologies">
+      <p class="tech-strip-label">Works with every stack</p>
+      <div class="tech-strip-track">
+        <!-- Duplicated for seamless loop -->
+        <div class="tech-strip-inner" aria-hidden="true">
+          <span class="tech-badge" style="background:#20232a;color:#61dafb;border:1px solid rgba(97,218,251,0.3);">⚛ React</span>
+          <span class="tech-badge" style="background:#1a1a1a;color:#42b883;border:1px solid rgba(66,184,131,0.3);">▲ Vue</span>
+          <span class="tech-badge" style="background:#1a0f0f;color:#dd0031;border:1px solid rgba(221,0,49,0.3);">🅐 Angular</span>
+          <span class="tech-badge" style="background:#1a1a1a;color:#e4e4e4;border:1px solid #3e3e3e;">▲ Next.js</span>
+          <span class="tech-badge" style="background:#1a1a2e;color:#90caf9;border:1px solid rgba(144,202,249,0.3);">● Express</span>
+          <span class="tech-badge" style="background:#1a2010;color:#339933;border:1px solid rgba(51,153,51,0.3);">⬡ Node.js</span>
+          <span class="tech-badge" style="background:#1a2a2a;color:#06b6d4;border:1px solid rgba(6,182,212,0.3);">~ Tailwind</span>
+          <span class="tech-badge" style="background:#0d1a2e;color:#3178c6;border:1px solid rgba(49,120,198,0.3);">TS TypeScript</span>
+          <span class="tech-badge" style="background:#1a1a2a;color:#3776ab;border:1px solid rgba(55,118,171,0.3);">🐍 Python</span>
+          <span class="tech-badge" style="background:#0d2010;color:#0fa36a;border:1px solid rgba(15,163,106,0.3);">🟢 Django</span>
+          <span class="tech-badge" style="background:#0a0f1a;color:#21759b;border:1px solid rgba(33,117,155,0.3);">W WordPress</span>
+          <span class="tech-badge" style="background:#0d0d1a;color:#635bff;border:1px solid rgba(99,91,255,0.3);">◆ Stripe</span>
+          <span class="tech-badge" style="background:#1a1200;color:#ffca28;border:1px solid rgba(255,202,40,0.3);">🔥 Firebase</span>
+          <span class="tech-badge" style="background:#15101a;color:#7e4ccd;border:1px solid rgba(126,76,205,0.3);">🐛 Sentry</span>
+          <span class="tech-badge" style="background:#1a0a1a;color:#e91e8c;border:1px solid rgba(233,30,140,0.3);">▲ GraphQL</span>
+          <span class="tech-badge" style="background:#0a1a10;color:#4ec9b0;border:1px solid rgba(78,201,176,0.3);">✓ Vitest</span>
+          <span class="tech-badge" style="background:#1a1000;color:#f7df1e;border:1px solid rgba(247,223,30,0.3);">JS JavaScript</span>
+          <span class="tech-badge" style="background:#0a1a0a;color:#6cc24a;border:1px solid rgba(108,194,74,0.3);">◉ Webpack</span>
+          <!-- Duplicate set for seamless marquee -->
+          <span class="tech-badge" style="background:#20232a;color:#61dafb;border:1px solid rgba(97,218,251,0.3);">⚛ React</span>
+          <span class="tech-badge" style="background:#1a1a1a;color:#42b883;border:1px solid rgba(66,184,131,0.3);">▲ Vue</span>
+          <span class="tech-badge" style="background:#1a0f0f;color:#dd0031;border:1px solid rgba(221,0,49,0.3);">🅐 Angular</span>
+          <span class="tech-badge" style="background:#1a1a1a;color:#e4e4e4;border:1px solid #3e3e3e;">▲ Next.js</span>
+          <span class="tech-badge" style="background:#1a1a2e;color:#90caf9;border:1px solid rgba(144,202,249,0.3);">● Express</span>
+          <span class="tech-badge" style="background:#1a2010;color:#339933;border:1px solid rgba(51,153,51,0.3);">⬡ Node.js</span>
+          <span class="tech-badge" style="background:#1a2a2a;color:#06b6d4;border:1px solid rgba(6,182,212,0.3);">~ Tailwind</span>
+          <span class="tech-badge" style="background:#0d1a2e;color:#3178c6;border:1px solid rgba(49,120,198,0.3);">TS TypeScript</span>
+          <span class="tech-badge" style="background:#1a1a2a;color:#3776ab;border:1px solid rgba(55,118,171,0.3);">🐍 Python</span>
+          <span class="tech-badge" style="background:#0d2010;color:#0fa36a;border:1px solid rgba(15,163,106,0.3);">🟢 Django</span>
+          <span class="tech-badge" style="background:#0a0f1a;color:#21759b;border:1px solid rgba(33,117,155,0.3);">W WordPress</span>
+          <span class="tech-badge" style="background:#0d0d1a;color:#635bff;border:1px solid rgba(99,91,255,0.3);">◆ Stripe</span>
+          <span class="tech-badge" style="background:#1a1200;color:#ffca28;border:1px solid rgba(255,202,40,0.3);">🔥 Firebase</span>
+          <span class="tech-badge" style="background:#15101a;color:#7e4ccd;border:1px solid rgba(126,76,205,0.3);">🐛 Sentry</span>
+          <span class="tech-badge" style="background:#1a0a1a;color:#e91e8c;border:1px solid rgba(233,30,140,0.3);">▲ GraphQL</span>
+          <span class="tech-badge" style="background:#0a1a10;color:#4ec9b0;border:1px solid rgba(78,201,176,0.3);">✓ Vitest</span>
+          <span class="tech-badge" style="background:#1a1000;color:#f7df1e;border:1px solid rgba(247,223,30,0.3);">JS JavaScript</span>
+          <span class="tech-badge" style="background:#0a1a0a;color:#6cc24a;border:1px solid rgba(108,194,74,0.3);">◉ Webpack</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         How It Works
+         ========================================== -->
+    <section id="how-it-works">
+      <div class="container">
+        <span class="section-label">How it works</span>
+        <h2 class="section-heading">Debug in seconds,<br>not hours</h2>
+        <p class="section-sub">No setup, no configuration. Open the sidebar and ErrorDecoder handles the rest.</p>
+
+        <div class="steps">
+          <article class="step">
+            <span class="step-number" aria-hidden="true">1</span>
+            <div class="step-num-label" aria-hidden="true">1</div>
+            <h3>Errors appear automatically</h3>
+            <p>Console errors, network failures, and unhandled exceptions stream into the sidebar in real-time. No copy-pasting, no DevTools hunting.</p>
+          </article>
+
+          <article class="step">
+            <span class="step-number" aria-hidden="true">2</span>
+            <div class="step-num-label" aria-hidden="true">2</div>
+            <h3>Click Decode</h3>
+            <p>Select one error or batch them all. AI analyzes the error with your tech stack context — framework, environment, and page URL all factor in.</p>
+          </article>
+
+          <article class="step">
+            <span class="step-number" aria-hidden="true">3</span>
+            <div class="step-num-label" aria-hidden="true">3</div>
+            <h3>Get the fix</h3>
+            <p>Plain English explanation, root cause analysis, step-by-step solution, and copy-pasteable code. No more Stack Overflow rabbit holes.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         Features Bento Grid
+         ========================================== -->
+    <section id="features">
+      <div class="container">
+        <div class="features-header">
+          <span class="section-label">Features</span>
+          <h2 class="section-heading">Everything you need<br>to debug faster</h2>
+        </div>
+
+        <div class="bento">
+          <article class="feature-card">
+            <span class="feature-icon" aria-hidden="true">⚡</span>
+            <h3>Real-time error stream</h3>
+            <p>Console errors, network failures, and unhandled exceptions captured automatically as they happen. No setup needed.</p>
+          </article>
+
+          <article class="feature-card">
+            <span class="feature-icon" aria-hidden="true">🤖</span>
+            <h3>AI-powered decode</h3>
+            <p>Claude AI explains what happened, why it happened, and exactly how to fix it. With copy-pasteable code examples tailored to your stack.</p>
+          </article>
+
+          <article class="feature-card">
+            <span class="feature-icon" aria-hidden="true">🔍</span>
+            <h3>Element inspector</h3>
+            <p>Click any element on the page. See computed styles, CSS rules, and ask AI questions about it. Like DevTools, but with a brain.</p>
+          </article>
+
+          <article class="feature-card">
+            <span class="feature-icon" aria-hidden="true">🏷️</span>
+            <h3>90+ tech detection</h3>
+            <p>Auto-detects your framework — React, Vue, Django, Express, and 90+ more. AI tailors its advice to your exact stack, not generic answers.</p>
+          </article>
+
+          <article class="feature-card">
+            <span class="feature-icon" aria-hidden="true">🗺️</span>
+            <h3>Source map resolution</h3>
+            <p>Maps minified stack traces back to your original source files. See the actual line that broke, not bundle.min.js:1.</p>
+          </article>
+
+          <article class="feature-card">
+            <span class="feature-icon" aria-hidden="true">🌐</span>
+            <h3>Works everywhere</h3>
+            <p>Any webpage. Stack Overflow, GitHub, your localhost, production. Wherever errors happen — ErrorDecoder is already watching.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         Error Types
+         ========================================== -->
+    <section>
+      <div class="container">
+        <div class="error-types-header">
+          <span class="section-label">Coverage</span>
+          <h2 class="section-heading">Decode any error</h2>
+          <p class="section-sub">From cryptic stack traces to mysterious network failures — ErrorDecoder handles them all.</p>
+        </div>
+
+        <div class="error-pills" role="list">
+          <span class="error-pill pill-red" role="listitem">TypeError</span>
+          <span class="error-pill pill-red" role="listitem">ReferenceError</span>
+          <span class="error-pill pill-orange" role="listitem">CORS</span>
+          <span class="error-pill pill-orange" role="listitem">404 / 500</span>
+          <span class="error-pill pill-red" role="listitem">React Hydration</span>
+          <span class="error-pill pill-red" role="listitem">Module Not Found</span>
+          <span class="error-pill pill-red" role="listitem">Promise Rejection</span>
+          <span class="error-pill pill-yellow" role="listitem">Auth Failures</span>
+          <span class="error-pill pill-yellow" role="listitem">Build Errors</span>
+          <span class="error-pill pill-yellow" role="listitem">Database Errors</span>
+          <span class="error-pill pill-orange" role="listitem">Network Timeouts</span>
+          <span class="error-pill pill-red" role="listitem">SyntaxError</span>
+          <span class="error-pill pill-yellow" role="listitem">Webpack Errors</span>
+          <span class="error-pill pill-orange" role="listitem">API Errors</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         Pricing
+         Pure CSS toggle: radio inputs are direct
+         siblings of .pricing-cards so the general
+         sibling selector (~) can reach them.
+         ========================================== -->
+    <section id="pricing" class="pricing-section">
+      <!--
+        These two radio inputs MUST be direct children of .pricing-section
+        (or at least at the same level as .pricing-cards) for the CSS
+        sibling selector #toggle-yearly:checked ~ .pricing-cards to work.
+        They are visually hidden but functionally active.
+      -->
+      <input type="radio" name="billing" id="toggle-monthly" checked
+             style="position:absolute;opacity:0;width:0;height:0;pointer-events:none;">
+      <input type="radio" name="billing" id="toggle-yearly"
+             style="position:absolute;opacity:0;width:0;height:0;pointer-events:none;">
+
+      <div class="container">
+        <div class="pricing-header">
+          <span class="section-label">Pricing</span>
+          <h2 class="section-heading">Simple, transparent pricing</h2>
+          <p class="section-sub">Start free. Upgrade when you need more.</p>
+        </div>
+
+        <!-- Toggle UI — labels point to the radio inputs above -->
+        <div style="text-align:center;">
+          <div class="price-toggle" role="group" aria-label="Billing period">
+            <label for="toggle-monthly" class="label-monthly">Monthly</label>
+            <label for="toggle-yearly" class="label-yearly">
+              Yearly
+              <span class="save-badge">save 27%</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!--
+        .pricing-cards is a direct child of .pricing-section,
+        making it a sibling of the radio inputs above.
+        CSS: #toggle-yearly:checked ~ .pricing-cards .price-monthly { display: none; }
+      -->
+      <div class="pricing-cards">
+        <!-- Free -->
+        <div class="pricing-card free">
+          <div class="pricing-card-top-bar" aria-hidden="true"></div>
+          <div>
+            <div class="pricing-tier">Free</div>
+            <div class="pricing-price price-monthly">
+              <span class="price-amount">$0</span>
+              <span class="price-period">/ month</span>
+            </div>
+            <div class="pricing-price price-yearly">
+              <span class="price-amount">$0</span>
+              <span class="price-period">/ year</span>
+            </div>
+            <p style="font-size:13px;color:var(--text-muted);margin-top:6px;">Forever free, no credit card.</p>
+          </div>
+          <ul class="pricing-features">
+            <li>3 decodes per day</li>
+            <li>Claude Haiku AI</li>
+            <li>Basic page context</li>
+            <li>1,000 character limit</li>
+            <li class="muted">Decode history</li>
+            <li class="muted">Deep Analysis (Sonnet)</li>
+          </ul>
+          <a href="#" class="btn-pricing accent" aria-label="Add the free version of ErrorDecoder to Chrome">Add to Chrome — Free</a>
+        </div>
+
+        <!-- Pro -->
+        <div class="pricing-card featured">
+          <div class="pricing-card-top-bar" aria-hidden="true"></div>
+          <span class="most-popular-badge">Most Popular</span>
+          <div>
+            <div class="pricing-tier">Pro</div>
+            <div class="pricing-price price-monthly">
+              <span class="price-amount">$9</span>
+              <span class="price-period">/ month</span>
+            </div>
+            <div class="pricing-price price-yearly">
+              <span class="price-amount">$79</span>
+              <span class="price-period">/ year</span>
+            </div>
+            <p style="font-size:13px;color:var(--text-muted);margin-top:6px;">Billed yearly = $6.58/month.</p>
+          </div>
+          <ul class="pricing-features">
+            <li>Unlimited decodes</li>
+            <li>Claude Haiku + Sonnet AI</li>
+            <li>Full page context</li>
+            <li>Unlimited input size</li>
+            <li>Full decode history</li>
+            <li>20 Deep Analysis / month</li>
+          </ul>
+          <a href="#" class="btn-pricing sonnet" aria-label="Start your ErrorDecoder Pro trial">Start Free, Upgrade Anytime</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         FAQ
+         ========================================== -->
+    <section id="faq">
+      <div class="container">
+        <div style="text-align:center;margin-bottom:0;">
+          <span class="section-label">FAQ</span>
+          <h2 class="section-heading">Frequently asked questions</h2>
+        </div>
+
+        <div class="faq-list">
+          <details>
+            <summary>Is it really free?</summary>
+            <div class="faq-answer">
+              <p>Yes! The free plan includes 3 AI-powered error decodes per day, forever. No credit card required. No trial period.</p>
+            </div>
+          </details>
+
+          <details>
+            <summary>What data do you collect?</summary>
+            <div class="faq-answer">
+              <p>Only the error text you explicitly choose to decode. We never access your source code, browsing history, or any page content you don't select. Error text is processed by Claude AI (Anthropic) and optionally cached to speed up common errors.</p>
+            </div>
+          </details>
+
+          <details>
+            <summary>Does it work offline?</summary>
+            <div class="faq-answer">
+              <p>The error capture and element inspector work without internet. AI-powered decoding requires an internet connection to reach the Claude API.</p>
+            </div>
+          </details>
+
+          <details>
+            <summary>Which browsers are supported?</summary>
+            <div class="faq-answer">
+              <p>Chrome and all Chromium-based browsers — Edge, Brave, Opera, Arc, and Vivaldi.</p>
+            </div>
+          </details>
+
+          <details>
+            <summary>Can it see my source code?</summary>
+            <div class="faq-answer">
+              <p>No. ErrorDecoder only sees the error message and stack trace text. If source maps are available (dev mode), it maps minified filenames back to originals, but your actual source code stays in your browser.</p>
+            </div>
+          </details>
+
+          <details>
+            <summary>What AI model powers it?</summary>
+            <div class="faq-answer">
+              <p>Claude by Anthropic. Free users get Claude Haiku 4.5 (fast, accurate). Pro users also get access to Claude Sonnet 4.6 for deeper analysis of complex errors — 20 Sonnet decodes per month.</p>
+            </div>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         Final CTA
+         ========================================== -->
+    <section class="final-cta">
+      <div class="container">
+        <h2>Ready to stop wasting time<br>on error messages?</h2>
+        <p class="sub">Join thousands of developers who decode errors in seconds, not hours.</p>
+        <a href="#" class="btn-primary" style="font-size:17px;padding:16px 36px;" aria-label="Add ErrorDecoder to Chrome for free">
+          ⚡ Add to Chrome — Free
+        </a>
+        <p class="cta-note">No credit card required. Free forever.</p>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ==========================================
+       Footer
+       ========================================== -->
+  <footer class="footer">
+    <div class="footer-inner">
+      <div>
+        <div class="footer-brand">ErrorDecoder</div>
+        <div class="footer-copy">© 2026</div>
+      </div>
+      <nav class="footer-links" aria-label="Footer navigation">
+        <a href="/privacy">Privacy Policy</a>
+        <a href="/terms">Terms of Service</a>
+      </nav>
+      <div class="footer-author">Built by Patrick Rizzardi</div>
+    </div>
+  </footer>
+
 </body>
 </html>
