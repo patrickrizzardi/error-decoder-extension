@@ -298,6 +298,32 @@ const decodeInput = document.getElementById("decode-input") as HTMLTextAreaEleme
 const decodeResult = document.getElementById("decode-result")!;
 const sonnetBtn = document.getElementById("decode-sonnet") as HTMLButtonElement;
 const sonnetRemaining = document.getElementById("sonnet-remaining")!;
+const haikuRemaining = document.getElementById("haiku-remaining")!;
+const usageBar = document.getElementById("usage-bar")!;
+
+const updateUsageDisplay = (used: number, limit: number, plan: string) => {
+  if (plan === "pro") {
+    haikuRemaining.textContent = "";
+    usageBar.classList.add("hidden");
+    return;
+  }
+  const remaining = Math.max(0, limit - used);
+  haikuRemaining.textContent = `(${remaining} left)`;
+  if (remaining === 0) {
+    haikuBtn.disabled = true;
+    haikuRemaining.textContent = "(limit reached)";
+    usageBar.classList.remove("hidden");
+    usageBar.className = "usage-bar limit-hit";
+    usageBar.innerHTML = `<a href="#" id="upgrade-link" class="btn btn-upgrade">Upgrade to Pro — Unlimited Decodes</a>`;
+    usageBar.querySelector("#upgrade-link")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      chrome.tabs.create({ url: AUTH_URL.replace("/auth", "/#pricing") });
+    });
+  } else {
+    haikuBtn.disabled = false;
+    usageBar.classList.add("hidden");
+  }
+};
 
 const loadUserPlan = async () => {
   const apiKey = await getApiKey();
@@ -306,12 +332,14 @@ const loadUserPlan = async () => {
   try {
     const response = await api.usage();
     if ("data" in response) {
-      if (response.data.plan === "pro") {
+      const { plan, used, limit, sonnetUsed, sonnetLimit } = response.data;
+      if (plan === "pro") {
         sonnetBtn.classList.remove("hidden");
-        const remaining = response.data.sonnetLimit - response.data.sonnetUsed;
+        const remaining = sonnetLimit - sonnetUsed;
         sonnetRemaining.textContent = `(${remaining} left)`;
       }
-      chrome.storage.local.set({ userPlan: response.data.plan });
+      updateUsageDisplay(used, limit, plan);
+      chrome.storage.local.set({ userPlan: plan });
     }
   } catch {}
 };
@@ -324,7 +352,11 @@ const setDecoding = (loading: boolean, phase?: string) => {
   isDecoding = loading;
   haikuBtn.disabled = loading;
   sonnetBtn.disabled = loading;
-  haikuBtn.textContent = loading ? (phase || "Decoding...") : "Decode (Haiku)";
+  if (loading) {
+    haikuBtn.textContent = phase || "Decoding...";
+  } else {
+    haikuBtn.innerHTML = `Decode (Haiku) <span id="haiku-remaining">${haikuRemaining.textContent}</span>`;
+  }
   decodeInput.readOnly = loading;
 };
 
@@ -368,7 +400,7 @@ const decodeSingle = async (errorText: string, model: "haiku" | "sonnet") => {
     <div class="auth-prompt">
       <p>Sign up to start decoding errors</p>
       <p class="auth-sub">Free account — 3 decodes per day</p>
-      <button class="btn-primary auth-signup-btn">Sign Up Free</button>
+      <button class="btn btn-primary auth-signup-btn">Sign Up Free</button>
       <p class="auth-fallback">Already have a key? <a href="#" class="auth-settings-link">Paste it in Settings</a></p>
     </div>`;
     decodeResult.querySelector(".auth-signup-btn")?.addEventListener("click", () => {
@@ -401,7 +433,18 @@ const decodeSingle = async (errorText: string, model: "haiku" | "sonnet") => {
     const json = await response.json();
 
     if (json.error) {
-      decodeResult.innerHTML = `<p class="error-msg">${escapeHtml(json.error.message)}</p>`;
+      if (json.upgradeUrl) {
+        decodeResult.innerHTML = `
+          <div class="auth-prompt">
+            <p>${escapeHtml(json.error.message)}</p>
+            <button class="btn btn-sonnet auth-signup-btn">Upgrade to Pro</button>
+          </div>`;
+        decodeResult.querySelector(".auth-signup-btn")?.addEventListener("click", () => {
+          chrome.tabs.create({ url: json.upgradeUrl });
+        });
+      } else {
+        decodeResult.innerHTML = `<p class="error-msg">${escapeHtml(json.error.message)}</p>`;
+      }
       return;
     }
 
@@ -411,6 +454,7 @@ const decodeSingle = async (errorText: string, model: "haiku" | "sonnet") => {
     decodeResult.innerHTML = `<p class="error-msg">Failed to connect to API.</p>`;
   } finally {
     setDecoding(false);
+    loadUserPlan(); // Refresh usage count after decode
   }
 };
 
@@ -547,7 +591,7 @@ ${selectedElement.outerHTML}${getTechContext()}`;
     <div class="auth-prompt">
       <p>Sign up to ask about elements</p>
       <p class="auth-sub">Free account — 3 decodes per day</p>
-      <button class="btn-primary auth-signup-btn">Sign Up Free</button>
+      <button class="btn btn-primary auth-signup-btn">Sign Up Free</button>
       <p class="auth-fallback">Already have a key? <a href="#" class="auth-settings-link">Paste it in Settings</a></p>
     </div>`;
     inspectResult.querySelector(".auth-signup-btn")?.addEventListener("click", () => {

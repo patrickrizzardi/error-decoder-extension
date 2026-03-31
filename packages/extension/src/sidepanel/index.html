@@ -34,9 +34,9 @@
         </div>
       </div>
       <div id="feed-actions" class="hidden">
-        <button id="decode-selected" class="btn-primary" disabled>Decode Selected</button>
-        <button id="decode-all" class="btn-secondary">Decode All</button>
-        <button id="clear-errors" class="btn-secondary">Clear</button>
+        <button id="decode-selected" class="btn btn-primary" disabled>Decode Selected</button>
+        <button id="decode-all" class="btn btn-secondary">Decode All</button>
+        <button id="clear-errors" class="btn btn-secondary">Clear</button>
       </div>
     </div>
 
@@ -44,24 +44,25 @@
     <div id="tab-decode" class="tab-content">
       <div id="decode-input-area">
         <div class="textarea-wrap">
-          <textarea id="decode-input" placeholder="Paste an error, or right-click selected text on the page to send it here..." rows="5"></textarea>
+          <textarea id="decode-input" class="input" placeholder="Paste an error, or right-click selected text on the page to send it here..." rows="5"></textarea>
           <div class="textarea-grip" id="textarea-grip"><div class="textarea-grip-pill"></div></div>
         </div>
         <div class="model-picker">
-          <button id="decode-haiku" class="btn-primary">Decode (Haiku)</button>
-          <button id="decode-sonnet" class="btn-sonnet hidden" title="Uses Claude Sonnet for deeper analysis">
+          <button id="decode-haiku" class="btn btn-primary">Decode (Haiku) <span id="haiku-remaining"></span></button>
+          <button id="decode-sonnet" class="btn btn-sonnet hidden" title="Uses Claude Sonnet for deeper analysis">
             Sonnet <span id="sonnet-remaining"></span>
           </button>
         </div>
+        <div id="usage-bar" class="usage-bar hidden"></div>
       </div>
-      <div id="decode-result"></div>
+      <div id="decode-result" class="markdown-body"></div>
     </div>
 
     <!-- INSPECT TAB — element inspector -->
     <div id="tab-inspect" class="tab-content">
       <div id="inspect-start">
-        <button id="inspect-btn" class="btn-primary">🔍 Click to inspect an element</button>
-        <button id="inspect-cancel" class="btn-secondary hidden">Cancel (ESC)</button>
+        <button id="inspect-btn" class="btn btn-primary">🔍 Click to inspect an element</button>
+        <button id="inspect-cancel" class="btn btn-secondary hidden">Cancel (ESC)</button>
         <p class="hint">Hover over any element on the page, click to select. Press ESC to cancel.</p>
       </div>
       <div id="inspect-selected" class="hidden">
@@ -69,18 +70,18 @@
           No source maps detected — file paths can't be resolved. For exact file references, test on localhost or enable source maps in your build config.
         </div>
         <div class="inspect-toolbar">
-          <button id="inspect-new" class="btn-secondary">🔍 Inspect new element</button>
+          <button id="inspect-new" class="btn btn-secondary">🔍 Inspect new element</button>
         </div>
         <div id="element-info"></div>
         <div class="textarea-grip" id="element-info-grip" style="margin-bottom: 6px;"><div class="textarea-grip-pill"></div></div>
         <div class="inspect-ask">
           <div class="textarea-wrap">
-            <textarea id="inspect-question" rows="2" placeholder="How do I center this? Make it bigger? What does this do?"></textarea>
+            <textarea id="inspect-question" class="input" rows="2" placeholder="How do I center this? Make it bigger? What does this do?"></textarea>
             <div class="textarea-grip" id="inspect-question-grip"><div class="textarea-grip-pill"></div></div>
           </div>
-          <button id="inspect-ask-btn" class="btn-primary">Ask</button>
+          <button id="inspect-ask-btn" class="btn btn-primary">Ask</button>
         </div>
-        <div id="inspect-result"></div>
+        <div id="inspect-result" class="markdown-body"></div>
       </div>
     </div>
 
