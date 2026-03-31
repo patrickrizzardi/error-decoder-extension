@@ -1,6 +1,7 @@
 // Popup — paste mode with inline results
 
 import { api } from "../shared/api";
+import { copyToClipboard } from "../shared/ui";
 import type { DecodeResponse } from "@shared/types";
 
 const textarea = document.getElementById("error-input") as HTMLTextAreaElement;
@@ -68,12 +69,9 @@ decodeBtn.addEventListener("click", async () => {
 });
 
 // Copy code
-document.getElementById("copy-code")?.addEventListener("click", async () => {
-  const code = document.getElementById("code-after-text")?.textContent ?? "";
-  await navigator.clipboard.writeText(code);
+document.getElementById("copy-code")?.addEventListener("click", () => {
   const btn = document.getElementById("copy-code")!;
-  btn.textContent = "Copied!";
-  setTimeout(() => { btn.textContent = "Copy"; }, 2000);
+  copyToClipboard(btn, () => document.getElementById("code-after-text")?.textContent ?? "");
 });
 
 // Decode another

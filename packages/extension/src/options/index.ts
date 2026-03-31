@@ -1,6 +1,7 @@
 // Options page — account settings
 
 import { storage } from "../shared/storage";
+import { copyToClipboard } from "../shared/ui";
 
 const loadProfile = async () => {
   const email = await storage.get("userEmail");
@@ -38,10 +39,8 @@ document.getElementById("save-key")?.addEventListener("click", async () => {
 document.getElementById("copy-key")?.addEventListener("click", async () => {
   const apiKey = await storage.get("apiKey");
   if (apiKey) {
-    await navigator.clipboard.writeText(apiKey);
     const btn = document.getElementById("copy-key")!;
-    btn.textContent = "Copied!";
-    setTimeout(() => { btn.textContent = "Copy Key"; }, 2000);
+    copyToClipboard(btn, () => apiKey, "Copy Key");
   }
 });
 
