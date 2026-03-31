@@ -574,4 +574,43 @@ body {
 /* Error messages */
 .error-msg { color: var(--error-red); }
 
+/* Auth prompt */
+.auth-prompt {
+  text-align: center;
+  padding: 24px 16px;
+}
+
+.auth-prompt p {
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.auth-sub {
+  color: var(--text-muted) !important;
+  font-size: 11px !important;
+}
+
+.auth-prompt .btn-primary {
+  flex: none;
+  width: auto;
+  padding: 10px 24px;
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+.auth-fallback {
+  font-size: 11px !important;
+  color: var(--text-muted) !important;
+  margin-top: 12px !important;
+}
+
+.auth-fallback a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.auth-fallback a:hover {
+  text-decoration: underline;
+}
+
 .hidden { display: none !important; }

@@ -5,7 +5,7 @@ import { marked } from "marked";
 import { escapeHtml } from "../shared/html";
 import { copyToClipboard, setupResizableGrip } from "../shared/ui";
 import { getApiKey } from "../shared/storage";
-import { api, API_BASE } from "../shared/api";
+import { api, API_BASE, AUTH_URL } from "../shared/api";
 import type { CapturedError } from "@shared/types";
 
 // Resizable textareas
@@ -95,6 +95,15 @@ chrome.storage.session.onChanged.addListener((changes) => {
     if (changes[techKey]?.newValue) {
       renderTechBar(changes[techKey].newValue);
     }
+  }
+});
+
+// React to auth — dismiss signup prompts when key arrives
+chrome.storage.local.onChanged.addListener((changes) => {
+  if (changes.apiKey?.newValue) {
+    document.querySelectorAll(".auth-prompt").forEach((el) => {
+      el.innerHTML = `<p style="color: var(--success);">Signed in! You can now decode errors.</p>`;
+    });
   }
 });
 
@@ -355,7 +364,20 @@ const decodeSingle = async (errorText: string, model: "haiku" | "sonnet") => {
 
   const apiKey = await getApiKey();
   if (!apiKey) {
-    decodeResult.innerHTML = `<p class="error-msg">API key not set. Open extension settings and paste your key.</p>`;
+    decodeResult.innerHTML = `
+    <div class="auth-prompt">
+      <p>Sign up to start decoding errors</p>
+      <p class="auth-sub">Free account — 3 decodes per day</p>
+      <button class="btn-primary auth-signup-btn">Sign Up Free</button>
+      <p class="auth-fallback">Already have a key? <a href="#" class="auth-settings-link">Paste it in Settings</a></p>
+    </div>`;
+    decodeResult.querySelector(".auth-signup-btn")?.addEventListener("click", () => {
+      chrome.tabs.create({ url: AUTH_URL });
+    });
+    decodeResult.querySelector(".auth-settings-link")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      chrome.runtime.openOptionsPage();
+    });
     return;
   }
 
@@ -521,7 +543,20 @@ ${selectedElement.outerHTML}${getTechContext()}`;
 
   const apiKey = await getApiKey();
   if (!apiKey) {
-    inspectResult.innerHTML = `<p class="error-msg">API key not set.</p>`;
+    inspectResult.innerHTML = `
+    <div class="auth-prompt">
+      <p>Sign up to ask about elements</p>
+      <p class="auth-sub">Free account — 3 decodes per day</p>
+      <button class="btn-primary auth-signup-btn">Sign Up Free</button>
+      <p class="auth-fallback">Already have a key? <a href="#" class="auth-settings-link">Paste it in Settings</a></p>
+    </div>`;
+    inspectResult.querySelector(".auth-signup-btn")?.addEventListener("click", () => {
+      chrome.tabs.create({ url: AUTH_URL });
+    });
+    inspectResult.querySelector(".auth-settings-link")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      chrome.runtime.openOptionsPage();
+    });
     inspectAskBtn.disabled = false;
     inspectAskBtn.textContent = "Ask";
     return;
