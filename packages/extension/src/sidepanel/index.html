@@ -43,7 +43,10 @@
     <!-- DECODE TAB — paste/review + model picker + results -->
     <div id="tab-decode" class="tab-content">
       <div id="decode-input-area">
-        <textarea id="decode-input" placeholder="Paste an error, or right-click selected text on the page to send it here..." rows="5"></textarea>
+        <div class="textarea-wrap">
+          <textarea id="decode-input" placeholder="Paste an error, or right-click selected text on the page to send it here..." rows="5"></textarea>
+          <div class="textarea-grip" id="textarea-grip"><div class="textarea-grip-pill"></div></div>
+        </div>
         <div class="model-picker">
           <button id="decode-haiku" class="btn-primary">Decode (Haiku)</button>
           <button id="decode-sonnet" class="btn-sonnet hidden" title="Uses Claude Sonnet for deeper analysis">
@@ -62,6 +65,9 @@
         <p class="hint">Hover over any element on the page, click to select. Press ESC to cancel.</p>
       </div>
       <div id="inspect-selected" class="hidden">
+        <div id="sourcemap-tip" class="sourcemap-tip hidden">
+          No source maps detected — file paths can't be resolved. For exact file references, test on localhost or enable source maps in your build config.
+        </div>
         <div class="inspect-toolbar">
           <button id="inspect-new" class="btn-secondary">🔍 Inspect new element</button>
         </div>

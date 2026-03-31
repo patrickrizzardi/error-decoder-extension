@@ -3,6 +3,44 @@
 
 import { marked } from "marked";
 
+// ============================================
+// Textarea resize grip
+// ============================================
+
+(() => {
+  const grip = document.getElementById("textarea-grip");
+  const textarea = document.getElementById("decode-input") as HTMLTextAreaElement | null;
+  if (!grip || !textarea) return;
+
+  let isDragging = false;
+  let startY = 0;
+  let startHeight = 0;
+
+  grip.addEventListener("mousedown", (e) => {
+    isDragging = true;
+    startY = e.clientY;
+    startHeight = textarea.offsetHeight;
+    e.preventDefault();
+
+    const pill = grip.querySelector(".textarea-grip-pill") as HTMLElement;
+    if (pill) pill.style.background = "rgba(86, 156, 214, 0.8)";
+  });
+
+  document.addEventListener("mousemove", (e) => {
+    if (!isDragging) return;
+    const delta = e.clientY - startY;
+    const newHeight = Math.max(40, startHeight + delta);
+    textarea.style.height = `${newHeight}px`;
+  });
+
+  document.addEventListener("mouseup", () => {
+    if (!isDragging) return;
+    isDragging = false;
+    const pill = grip.querySelector(".textarea-grip-pill") as HTMLElement;
+    if (pill) pill.style.background = "";
+  });
+})();
+
 type CapturedError = {
   text: string;
   level: string;
@@ -275,7 +313,7 @@ const loadUserPlan = async () => {
   const apiKey = await getApiKey();
   if (!apiKey) return;
 
-  const apiBase = typeof __API_BASE__ !== "undefined" ? __API_BASE__ : "http://localhost:5000/api";
+  const apiBase = typeof __API_BASE__ !== "undefined" ? __API_BASE__ : "http://localhost:4001/api";
   try {
     const res = await fetch(`${apiBase}/usage`, { headers: { Authorization: `Bearer ${apiKey}` } });
     const json = await res.json();
@@ -349,6 +387,8 @@ const decodeSingle = async (errorText: string, model: "haiku" | "sonnet") => {
   }
 
   setDecoding(true, "Resolving source maps...");
+  decodeInput.classList.remove("has-results");
+  decodeResult.innerHTML = "";
 
   // Resolve source maps to get actual file names + source code
   const enrichedText = await resolveSourceMaps(errorText);
@@ -356,7 +396,7 @@ const decodeSingle = async (errorText: string, model: "haiku" | "sonnet") => {
   setDecoding(true, "Decoding...");
   decodeResult.innerHTML = `<div class="skeleton"></div><div class="skeleton short"></div><div class="skeleton"></div>`;
 
-  const apiBase = typeof __API_BASE__ !== "undefined" ? __API_BASE__ : "http://localhost:5000/api";
+  const apiBase = typeof __API_BASE__ !== "undefined" ? __API_BASE__ : "http://localhost:4001/api";
 
   try {
     const response = await fetch(`${apiBase}/decode`, {
@@ -373,6 +413,7 @@ const decodeSingle = async (errorText: string, model: "haiku" | "sonnet") => {
     }
 
     renderMarkdown(json.data.markdown, decodeResult);
+    decodeInput.classList.add("has-results");
   } catch {
     decodeResult.innerHTML = `<p style="color: var(--error-red);">Failed to connect to API.</p>`;
   } finally {
@@ -392,7 +433,7 @@ const decodeBatch = async (errors: CapturedError[]) => {
   setDecoding(true);
   decodeResult.innerHTML = `<div class="skeleton"></div><div class="skeleton short"></div><div class="skeleton"></div><div class="skeleton short"></div>`;
 
-  const apiBase = typeof __API_BASE__ !== "undefined" ? __API_BASE__ : "http://localhost:5000/api";
+  const apiBase = typeof __API_BASE__ !== "undefined" ? __API_BASE__ : "http://localhost:4001/api";
 
   try {
     const response = await fetch(`${apiBase}/decode-batch`, {
@@ -416,6 +457,7 @@ const decodeBatch = async (errors: CapturedError[]) => {
     }
 
     renderMarkdown(json.data.markdown, decodeResult);
+    decodeInput.classList.add("has-results");
   } catch {
     decodeResult.innerHTML = `<p style="color: var(--error-red);">Failed to connect to API.</p>`;
   } finally {
@@ -504,6 +546,26 @@ const showInspectResult = (el: any) => {
 
   document.getElementById("element-info")!.textContent = info;
   document.getElementById("inspect-result")!.innerHTML = "";
+
+  // Show source map tip if on production without resolved files
+  // Check the ACTUAL page URL (from tab), not the sidebar's URL
+  const hasResolvedFiles = el.cssRules?.some((r: any) => r.originalFile);
+  const allInline = el.cssRules?.every((r: any) => r.file === "inline");
+  const tipEl = document.getElementById("sourcemap-tip");
+
+  if (tipEl) {
+    chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
+      const pageUrl = tab?.url || "";
+      const isLocal = pageUrl.includes("localhost") || pageUrl.includes("127.0.0.1");
+
+      // Only show tip on non-local sites with external bundled CSS and no resolved files
+      if (!isLocal && !hasResolvedFiles && !allInline) {
+        tipEl.classList.remove("hidden");
+      } else {
+        tipEl.classList.add("hidden");
+      }
+    });
+  }
 };
 
 const inspectAskBtn = document.getElementById("inspect-ask-btn") as HTMLButtonElement;
@@ -547,7 +609,7 @@ ${selectedElement.outerHTML}${getTechContext()}`;
     return;
   }
 
-  const apiBase = typeof __API_BASE__ !== "undefined" ? __API_BASE__ : "http://localhost:5000/api";
+  const apiBase = typeof __API_BASE__ !== "undefined" ? __API_BASE__ : "http://localhost:4001/api";
 
   try {
     const response = await fetch(`${apiBase}/decode`, {

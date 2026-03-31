@@ -34,6 +34,13 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* Custom scrollbars — dark theme */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+::-webkit-scrollbar-corner { background: var(--bg); }
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 12px;
@@ -195,7 +202,16 @@ body {
 }
 
 /* Decode tab */
-#decode-input-area { padding: 10px; flex-shrink: 0; }
+/* Decode input area — sticky at top, contains textarea + buttons + grip */
+#decode-input-area {
+  padding: 10px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg);
+  padding-bottom: 6px;
+}
 
 #decode-input {
   width: 100%;
@@ -206,21 +222,57 @@ body {
   color: var(--text);
   font-family: "Fira Code", Consolas, monospace;
   font-size: 11px;
-  resize: vertical;
-  min-height: 80px;
+  resize: none;
+  min-height: 50px;
+  overflow-y: auto;
+  transition: max-height 0.2s ease;
+}
+
+/* Collapse textarea when results are showing — but user can still resize */
+#decode-input.has-results {
+  height: 50px;
+  max-height: none;
 }
 
 #decode-input:focus { outline: none; border-color: var(--accent); }
+#decode-input::-webkit-resizer { display: none; }
+
+/* Custom resize grip — horizontal pill at bottom center of textarea */
+/* Textarea wrapper + drag grip */
+.textarea-wrap { position: relative; }
+
+.textarea-grip {
+  display: flex;
+  justify-content: center;
+  padding: 3px 0;
+  cursor: row-resize;
+}
+
+.textarea-grip-pill {
+  width: 32px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(128, 128, 128, 0.5);
+  transition: background 0.15s, width 0.15s;
+}
+
+.textarea-grip:hover .textarea-grip-pill {
+  background: rgba(86, 156, 214, 0.6);
+  width: 48px;
+}
 
 .model-picker {
   display: flex;
   gap: 6px;
   margin-top: 8px;
+  flex-shrink: 0;
 }
 
+/* Decode tab scrolls as one unit */
+#tab-decode { overflow-y: auto; }
+/* (consolidated into rule above) */
+
 #decode-result {
-  flex: 1;
-  overflow-y: auto;
   padding: 0 10px 10px;
 }
 
@@ -284,6 +336,17 @@ body {
   margin-bottom: 8px;
 }
 
+.sourcemap-tip {
+  font-size: 10px;
+  color: var(--warning-yellow);
+  background: rgba(204, 167, 0, 0.1);
+  border: 1px solid rgba(204, 167, 0, 0.2);
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
 .inspect-toolbar { margin-bottom: 8px; }
 
 .inspect-ask { display: flex; gap: 6px; margin-bottom: 8px; }
@@ -325,6 +388,7 @@ body {
   flex-shrink: 0;
 }
 
+/* Result areas */
 #result-content, #decode-result, #inspect-result {
   overflow-y: auto;
   flex: 1;
@@ -332,20 +396,83 @@ body {
 
 #result-content { padding: 10px; }
 
-/* Shared result styles */
-#result-content h3, #decode-result h3, #inspect-result h3 {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--accent);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin: 12px 0 4px;
+/* Markdown result styles — shared across decode, inspect, result panels */
+#decode-result, #inspect-result, #result-content {
+  padding: 10px;
+  font-size: 12px;
+  line-height: 1.55;
 }
 
-#result-content h3:first-child, #decode-result h3:first-child, #inspect-result h3:first-child { margin-top: 0; }
-#result-content p, #decode-result p, #inspect-result p { margin-bottom: 6px; }
-#result-content ul, #result-content ol, #decode-result ul, #decode-result ol, #inspect-result ul, #inspect-result ol { padding-left: 16px; margin-bottom: 6px; }
-#result-content li, #decode-result li, #inspect-result li { margin-bottom: 2px; }
+/* Headers — no underlines, use color + weight + spacing */
+#decode-result h1, #decode-result h2, #decode-result h3, #decode-result h4,
+#inspect-result h1, #inspect-result h2, #inspect-result h3, #inspect-result h4,
+#result-content h1, #result-content h2, #result-content h3, #result-content h4 {
+  color: var(--accent);
+  font-weight: 700;
+  margin-top: 18px;
+  margin-bottom: 8px;
+  padding: 0;
+  border: none;
+}
+
+#decode-result > :first-child, #inspect-result > :first-child, #result-content > :first-child { margin-top: 0 !important; }
+
+#decode-result h1, #inspect-result h1, #result-content h1 { font-size: 15px; }
+#decode-result h2, #inspect-result h2, #result-content h2 { font-size: 13px; }
+#decode-result h3, #inspect-result h3, #result-content h3 { font-size: 12px; }
+#decode-result h4, #inspect-result h4, #result-content h4 { font-size: 11px; color: var(--text); }
+
+/* Paragraphs */
+#decode-result p, #inspect-result p, #result-content p {
+  margin-bottom: 10px;
+  line-height: 1.6;
+}
+
+/* Lists */
+#decode-result ul, #decode-result ol,
+#inspect-result ul, #inspect-result ol,
+#result-content ul, #result-content ol {
+  padding-left: 20px;
+  margin-bottom: 12px;
+}
+
+#decode-result li, #inspect-result li, #result-content li {
+  margin-bottom: 6px;
+  line-height: 1.5;
+}
+
+/* Inline code — high contrast */
+#decode-result code, #inspect-result code, #result-content code {
+  font-family: "Fira Code", Consolas, monospace;
+  font-size: 11px;
+  background: rgba(86, 156, 214, 0.12);
+  color: var(--accent);
+  padding: 2px 5px;
+  border-radius: 3px;
+  border: 1px solid rgba(86, 156, 214, 0.15);
+}
+
+/* Code blocks — override inline code style */
+#decode-result pre code, #inspect-result pre code, #result-content pre code {
+  background: none;
+  color: var(--text);
+  padding: 0;
+  border-radius: 0;
+  border: none;
+}
+
+/* Strong/bold */
+#decode-result strong, #inspect-result strong, #result-content strong {
+  color: var(--text);
+  font-weight: 700;
+}
+
+/* Horizontal rules */
+#decode-result hr, #inspect-result hr, #result-content hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 16px 0;
+}
 
 .code-label-tag {
   display: inline-block;
@@ -361,29 +488,45 @@ body {
 .code-block {
   position: relative;
   background: var(--code-bg);
-  border-radius: 4px;
-  padding: 8px;
-  margin: 0 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 10px 10px 12px;
+  margin: 6px 0 12px;
   overflow-x: auto;
+  border-left: 3px solid var(--accent);
 }
 
-.code-block pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
-.code-block code { font-family: "Fira Code", Consolas, monospace; font-size: 11px; }
+.code-block pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+}
+
+.code-block code {
+  font-family: "Fira Code", Consolas, monospace;
+  font-size: 11px;
+  background: none !important;
+  padding: 0 !important;
+}
 
 .copy-btn {
   position: absolute;
-  top: 4px;
-  right: 4px;
+  top: 6px;
+  right: 6px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   color: var(--text-muted);
-  padding: 1px 6px;
-  border-radius: 3px;
+  padding: 3px 8px;
+  border-radius: 4px;
   font-size: 10px;
   cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.15s;
 }
 
-.copy-btn:hover { color: var(--text); }
+.code-block:hover .copy-btn { opacity: 1; }
+.copy-btn:hover { color: var(--text); border-color: var(--accent); }
 
 /* Skeleton */
 .skeleton { background: var(--bg-secondary); border-radius: 3px; height: 12px; margin-bottom: 6px; animation: pulse 1.5s infinite; }
