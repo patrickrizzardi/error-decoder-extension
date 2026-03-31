@@ -30,25 +30,29 @@ const entrypoints = [
   { entry: "src/devtools/panel.ts", outfile: "devtools/panel.js" },
 ];
 
-for (const { entry, outfile } of entrypoints) {
-  const result = await Bun.build({
-    entrypoints: [resolve(ROOT, entry)],
-    outdir: DIST,
-    naming: outfile,
-    target: "browser",
-    format: "iife",
-    minify: false,
-    sourcemap: "external",
-    define: {
-      "process.env.NODE_ENV": '"production"',
-      __API_BASE__: JSON.stringify(
-        process.env.API_BASE ?? "http://localhost:4001/api"
-      ),
-    },
-  });
+const results = await Promise.all(
+  entrypoints.map(({ entry, outfile }) =>
+    Bun.build({
+      entrypoints: [resolve(ROOT, entry)],
+      outdir: DIST,
+      naming: outfile,
+      target: "browser",
+      format: "iife",
+      minify: false,
+      sourcemap: "external",
+      define: {
+        "process.env.NODE_ENV": '"production"',
+        __API_BASE__: JSON.stringify(
+          process.env.API_BASE ?? "http://localhost:4001/api"
+        ),
+      },
+    })
+  )
+);
 
+for (const [i, result] of results.entries()) {
   if (!result.success) {
-    console.error(`Failed to build ${entry}:`);
+    console.error(`Failed to build ${entrypoints[i].entry}:`);
     for (const log of result.logs) {
       console.error(log);
     }
