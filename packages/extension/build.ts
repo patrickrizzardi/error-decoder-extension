@@ -45,6 +45,9 @@ const results = await Promise.all(
         __API_BASE__: JSON.stringify(
           process.env.API_BASE ?? "http://localhost:4001/api"
         ),
+        __AUTH_URL__: JSON.stringify(
+          process.env.AUTH_URL ?? "http://localhost:4000/auth"
+        ),
       },
     })
   )
