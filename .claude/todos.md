@@ -1,66 +1,87 @@
 # Todos: ErrorDecoder
 
 ## Current Goal
-Build an always-on AI debugging sidebar Chrome extension. Real-time error stream + network monitoring + element inspection + batch AI decode. Ship and get first paying customer.
+Build an always-on AI debugging sidebar Chrome extension. Real-time error stream + network monitoring + element inspection + tech stack detection + source map resolution + AI decode. Ship and get first paying customer.
 
-## PIVOT TASKS (Priority) ⏳
-- [ ] P.1 Fix console error capture chain (broken — script injection → CustomEvent → content script → background → sidebar)
-- [ ] P.2 Add chrome.webRequest network monitoring (background worker, no DevTools needed)
-- [ ] P.3 Redesign sidebar as real-time debugging dashboard (error feed + element inspector + decode panel)
-- [ ] P.4 Build element inspection mode (hover highlight, click select, computed styles, AI Q&A)
-- [ ] P.5 Build POST /api/decode-batch endpoint (last 10-15 errors, holistic AI analysis)
-- [ ] P.6 Update manifest permissions (webRequest, host_permissions)
-- [ ] P.7 Test full flow: errors stream into sidebar → decode single → decode batch → element inspect
+## Completed Features ✅
+- [x] Real-time error capture (console.error, console.warn, unhandled exceptions, promise rejections)
+- [x] Network monitoring (chrome.webRequest — 4xx, 5xx, CORS, connection failures)
+- [x] Per-tab error isolation (errors don't leak across tabs)
+- [x] Injected sidebar (iframe, pushes page content over, resizable width with drag handle)
+- [x] 3-tab UI: Errors feed | Decode | Inspect
+- [x] Multi-select errors with checkboxes + "Decode Selected" / "Decode All"
+- [x] Decode tab: paste/right-click text → pick Haiku or Sonnet → results
+- [x] No auto-decode — user controls when to spend API calls
+- [x] Markdown rendering for AI responses (marked library)
+- [x] Tech stack detection (90+ technologies: frameworks, UI libs, build tools, analytics, payments, crypto, monitoring, chat, auth, hosting, CMS, databases)
+- [x] Tech stack badges in sidebar header
+- [x] Tech context sent to AI for framework-specific answers
+- [x] Source map resolution for JS stack traces (resolves bundled filenames to original source)
+- [x] CSS source map resolution for element inspector
+- [x] Element inspection (hover highlight, click select, computed styles, CSS rules, AI Q&A)
+- [x] "No source maps" warning on production sites
+- [x] System prompts: error decode, batch decode, element inspect (all markdown, tech-aware)
+- [x] Loading states on all buttons (no double-click spam)
+- [x] Dark/light mode support
+- [x] Custom dark scrollbars
+- [x] Resizable textarea with grip pill
+- [x] Resizable sidebar width with grip pill (saved to localStorage)
+- [x] Context menu "Decode this error" → opens sidebar with text in decode tab
+- [x] Extension icon click toggles sidebar
+- [x] Close button, ESC to cancel inspect, re-inspect button
+- [x] Copy buttons on code blocks (clipboard-write permission on iframe)
+- [x] Admin email bypass (ADMIN_EMAILS env var → Pro without Stripe)
+- [x] Test user seed script
+- [x] Test errors page with realistic multi-signal scenarios
 
-## Phase 1: Backend API ✅ DONE (pre-pivot, still valid)
-- [x] 1.1-1.7 All API routes, middleware, validation, error handling — working
+## Completed Infrastructure ✅
+- [x] API: all routes (decode, decode-batch, auth, checkout, portal, webhook, feedback, account, usage, health)
+- [x] Database: all tables, RLS, triggers, functions live on Supabase
+- [x] Stripe: declarative sync script, checkout, webhooks, portal, signature verification
+- [x] Docker Compose: api (4001), web (4000), stripe-cli
+- [x] Anthropic SDK: Haiku + Sonnet, prompt caching setup, cost tracking
+- [x] Response caching (DB-level, smart heuristic for short errors)
+- [x] Valibot validation on all endpoints
+- [x] CORS, auth middleware, rate limiting
 
-## Phase 2: Database ✅ DONE
-- [x] 2.1-2.4 All tables, RLS, triggers, functions — live on Supabase
+## Remaining Phases
 
-## Phase 3: Extension Shell ✅ SCAFFOLDED (being pivoted)
-- [x] 3.1 Context menu "Decode this error" — working
-- [x] 3.2 Sidebar injection (iframe) — working
-- [x] 3.3 Content script — scaffolded, capture broken
-- [x] 3.4 Popup paste mode — working with inline results
-- [x] 3.5 Options page with manual API key input — working
-- [x] 3.6 DevTools panel — scaffolded but capture not working (deprioritized — sidebar is the product now)
-
-## Phase 4: Auth Flow
+### Phase 4: Auth Flow
 - [ ] 4.1 Supabase Auth config (email/pass + Google OAuth)
-- [ ] 4.2 Auth web page (signup/login forms) — scaffolded
-- [ ] 4.3 Extension ↔ web auth handshake
-- [ ] 4.4 API key generation + storage in chrome.storage
+- [ ] 4.2 Auth web page — scaffolded, needs testing end-to-end
+- [ ] 4.3 Extension ↔ web auth handshake (automatic API key storage)
 - [x] 4.5 Manual API key paste — working (options page)
 
-## Phase 5: AI Integration ✅ DONE
-- [x] 5.1-5.5 Anthropic SDK, system prompt, caching, cost tracking, Sonnet — all working
+### Phase 7: Usage Tracking UI
+- [ ] 7.1 Free tier limit enforced in sidebar UI (3/day)
+- [ ] 7.2 Remaining count visible in sidebar
+- [ ] 7.3 Upgrade CTA when limit hit
+- [ ] 7.4 Sonnet monthly limit display
 
-## Phase 6: Wire End-to-End (POST-PIVOT)
-- [ ] 6.1 Console errors stream into sidebar in real time
-- [ ] 6.2 Network errors stream into sidebar in real time
-- [ ] 6.3 Click error → decode → result in sidebar
-- [ ] 6.4 "Decode All" → batch analysis
-- [ ] 6.5 Element inspect → AI Q&A
-- [ ] 6.6 Test on real sites with real errors
+### Phase 9: UI Polish
+- [ ] 9.1 Code cleanup / DRY pass (sidepanel/index.ts is large, inline styles in panel.ts)
+- [ ] 9.2 Final visual polish based on audit findings
 
-## Phase 7: Usage Tracking (same as before)
-- [ ] 7.1-7.5 Daily limits, remaining count, upgrade CTA
+### Phase 10: Landing Page
+- [ ] 10.1 Full landing page (hero, how it works, pricing, FAQ)
+- [ ] 10.2 SEO meta tags, OG tags, structured data — basic version exists
+- [ ] 10.3 Privacy policy + terms of service pages
+- [ ] 10.4 Blog section ready for content marketing
 
-## Phase 8: Stripe Payments ✅ MOSTLY DONE
-- [x] 8.1-8.5 Checkout, webhooks, portal, signature verification — all implemented
-- [ ] 8.6 Extension upgrade flow (button → checkout → re-check plan)
+### Phase 11: Testing & QA
+- [ ] 11.1 Test on 15+ real error types across sites
+- [ ] 11.2 Full user journey (signup → decode → limit → upgrade → unlimited)
+- [ ] 11.3 Edge cases (offline, restricted pages, long errors, etc.)
 
-## Phase 9-13: Polish, Landing Page, Testing, CWS, Verification
-- Not started — do after pivot tasks complete
+### Phase 12: Chrome Web Store Prep
+- [ ] 12.1 Final icons (128, 48, 16) — placeholders exist
+- [ ] 12.2 Screenshots (1280x800 x3)
+- [ ] 12.3 Store listing copy (keyword optimized)
+- [ ] 12.4 Permission justifications
+- [ ] 12.5 Privacy policy hosted on errordecoder.dev
 
-## Completed
-- [x] [2026-03-27] All research, planning, account setup, domain
-- [x] [2026-03-27] Phase 0 scaffold (47 files)
-- [x] [2026-03-27] Full API with real Anthropic integration
-- [x] [2026-03-27] Database live on Supabase
-- [x] [2026-03-27] Extension builds and loads in Chrome + Opera
-- [x] [2026-03-27] Sidebar injection working (slides in from right)
-- [x] [2026-03-27] Popup paste mode with inline results working
-- [x] [2026-03-27] DevTools panel scaffolded
-- [x] [2026-03-28] Product pivot: "error decoder" → "always-on debugging sidebar"
+### Phase 13: Verification Sweep
+- [ ] 13.1 TODO/FIXME grep
+- [ ] 13.2 Security scan (no secrets in code)
+- [ ] 13.3 Quality checklist pass
+- [ ] 13.4 Code audit findings addressed
