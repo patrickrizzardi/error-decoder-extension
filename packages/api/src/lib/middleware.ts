@@ -7,6 +7,7 @@ type AuthUser = {
   email: string;
   plan: "free" | "pro";
   stripeCustomerId: string | null;
+  isAdmin: boolean;
 };
 
 // Extend Hono context with user
@@ -35,7 +36,7 @@ export const authMiddleware = async (c: Context, next: Next) => {
 
   const { data: user, error } = await supabase
     .from("users")
-    .select("id, email, plan, stripe_customer_id")
+    .select("id, email, plan, stripe_customer_id, is_admin")
     .eq("api_key", apiKey)
     .single();
 
@@ -51,15 +52,12 @@ export const authMiddleware = async (c: Context, next: Next) => {
     );
   }
 
-  // Admin emails always get Pro — no Stripe needed
-  const adminEmails = (process.env.ADMIN_EMAILS ?? "").split(",").map((e) => e.trim()).filter(Boolean);
-  const plan = adminEmails.includes(user.email) ? "pro" : user.plan;
-
   c.set("user", {
     id: user.id,
     email: user.email,
-    plan,
+    plan: user.is_admin ? "pro" : user.plan,
     stripeCustomerId: user.stripe_customer_id,
+    isAdmin: user.is_admin,
   });
 
   await next();
@@ -69,7 +67,7 @@ export const authMiddleware = async (c: Context, next: Next) => {
 export const rateLimitMiddleware = async (c: Context, next: Next) => {
   const user = c.get("user");
 
-  if (user.plan === "pro") {
+  if (user.isAdmin || user.plan === "pro") {
     await next();
     return;
   }

@@ -4,12 +4,6 @@ import { errorCodes } from "@shared/types";
 
 export const authRoutes = new Hono();
 
-// OAuth callback handler — Supabase redirects here after auth
-authRoutes.get("/callback", async (c) => {
-  // Phase 4: Implement OAuth callback
-  return c.json({ data: { message: "Auth callback — Phase 4" } });
-});
-
 // Get or create API key for authenticated user
 // Called by extension after Supabase auth, with Supabase JWT
 authRoutes.post("/key", async (c) => {
@@ -39,7 +33,7 @@ authRoutes.post("/key", async (c) => {
   // Get existing user row (created by trigger on auth.users insert)
   const { data: userRow, error: userError } = await supabase
     .from("users")
-    .select("api_key, email, plan")
+    .select("api_key, email, plan, is_admin")
     .eq("id", user.id)
     .single();
 
@@ -55,6 +49,7 @@ authRoutes.post("/key", async (c) => {
       apiKey: userRow.api_key,
       email: userRow.email,
       plan: userRow.plan,
+      isAdmin: userRow.is_admin,
     },
   });
 });
