@@ -9,6 +9,7 @@ let panelWidth = 400;
 const STORAGE_KEY = "errordecoder-panel-width";
 try {
   const saved = localStorage.getItem(STORAGE_KEY);
+  // Min/max panel width in pixels
   if (saved) panelWidth = Math.max(280, Math.min(800, parseInt(saved, 10)));
 } catch {}
 
@@ -39,10 +40,6 @@ export const hidePanel = () => {
 
   const html = document.documentElement;
   html.style.marginRight = "0";
-};
-
-export const togglePanel = () => {
-  if (panelVisible) hidePanel(); else showPanel();
 };
 
 export const isPanelVisible = () => panelVisible;
@@ -78,6 +75,7 @@ const createPanel = () => {
     height: "100vh",
     border: "none",
     borderLeft: "1px solid #3e3e3e",
+    // Max 32-bit signed int — ensures panel is above all page content
     zIndex: "2147483647",
     transform: `translateX(${panelWidth}px)`,
     transition: "transform 0.2s ease",
