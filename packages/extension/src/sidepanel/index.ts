@@ -2,52 +2,25 @@
 // Tabs: Errors (feed) | Decode (paste + model picker) | Inspect (element AI)
 
 import { marked } from "marked";
+import { escapeHtml } from "../shared/html";
+import { copyToClipboard, setupResizableGrip } from "../shared/ui";
+import { getApiKey } from "../shared/storage";
+import { api, API_BASE } from "../shared/api";
+import type { CapturedError } from "@shared/types";
 
-// ============================================
-// Textarea resize grip
-// ============================================
+// Resizable textareas
+// Resizable elements
+const decodeGrip = document.getElementById("textarea-grip");
+const decodeTextarea = document.getElementById("decode-input") as HTMLTextAreaElement | null;
+if (decodeGrip && decodeTextarea) setupResizableGrip(decodeTextarea, decodeGrip);
 
-(() => {
-  const grip = document.getElementById("textarea-grip");
-  const textarea = document.getElementById("decode-input") as HTMLTextAreaElement | null;
-  if (!grip || !textarea) return;
+const inspectGrip = document.getElementById("inspect-question-grip");
+const inspectTextarea = document.getElementById("inspect-question") as HTMLTextAreaElement | null;
+if (inspectGrip && inspectTextarea) setupResizableGrip(inspectTextarea, inspectGrip, 32);
 
-  let isDragging = false;
-  let startY = 0;
-  let startHeight = 0;
-
-  grip.addEventListener("mousedown", (e) => {
-    isDragging = true;
-    startY = e.clientY;
-    startHeight = textarea.offsetHeight;
-    e.preventDefault();
-
-    const pill = grip.querySelector(".textarea-grip-pill") as HTMLElement;
-    if (pill) pill.style.background = "rgba(86, 156, 214, 0.8)";
-  });
-
-  document.addEventListener("mousemove", (e) => {
-    if (!isDragging) return;
-    const delta = e.clientY - startY;
-    const newHeight = Math.max(40, startHeight + delta);
-    textarea.style.height = `${newHeight}px`;
-  });
-
-  document.addEventListener("mouseup", () => {
-    if (!isDragging) return;
-    isDragging = false;
-    const pill = grip.querySelector(".textarea-grip-pill") as HTMLElement;
-    if (pill) pill.style.background = "";
-  });
-})();
-
-type CapturedError = {
-  text: string;
-  level: string;
-  timestamp: number;
-  url?: string;
-  domain?: string;
-};
+const elementInfoGrip = document.getElementById("element-info-grip");
+const elementInfo = document.getElementById("element-info");
+if (elementInfoGrip && elementInfo) setupResizableGrip(elementInfo, elementInfoGrip, 60);
 
 let renderedCount = 0;
 
@@ -89,7 +62,7 @@ const resolveTabId = async () => {
   return currentTabId;
 };
 
-// Watch storage for this tab's errors
+// Single unified storage change listener — handles all keys
 chrome.storage.session.onChanged.addListener((changes) => {
   const key = getTabKey();
   if (key && changes[key]) {
@@ -107,6 +80,21 @@ chrome.storage.session.onChanged.addListener((changes) => {
   // Element selected from inspector
   if (changes.selectedElement?.newValue) {
     showInspectResult(changes.selectedElement.newValue);
+  }
+
+  // Inspect cancelled from page side: key present, newValue gone, oldValue was set
+  if ("selectedElement" in changes && changes.selectedElement.newValue === undefined && changes.selectedElement.oldValue !== undefined) {
+    if (!inspectCancelBtn.classList.contains("hidden")) {
+      cancelInspect();
+    }
+  }
+
+  // Tech stack updates
+  if (currentTabId) {
+    const techKey = `tech_tab_${currentTabId}`;
+    if (changes[techKey]?.newValue) {
+      renderTechBar(changes[techKey].newValue);
+    }
   }
 });
 
@@ -153,6 +141,7 @@ const renderErrorItem = (err: CapturedError, index: number) => {
   emptyState.classList.add("hidden");
   feedActions.classList.remove("hidden");
 
+  // Preview first 150 chars in error feed
   const firstLine = err.text.split("\n")[0].slice(0, 150);
   const time = new Date(err.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   const levelClass = err.level === "warning" ? "warning" : err.text.startsWith("Network") ? "network" : "error";
@@ -237,6 +226,7 @@ document.getElementById("decode-all")!.addEventListener("click", async () => {
   const key = getTabKey();
   if (!key) return;
   const result = await chrome.storage.session.get(key);
+  // Batch last 15 errors for Decode All
   const recent = (result[key] || []).slice(-15);
   if (recent.length === 0) return;
 
@@ -269,15 +259,6 @@ const loadTechStack = async () => {
   const tech = result[key];
   if (tech?.length) renderTechBar(tech);
 };
-
-// Also watch for tech updates
-chrome.storage.session.onChanged.addListener((changes) => {
-  if (!currentTabId) return;
-  const key = `tech_tab_${currentTabId}`;
-  if (changes[key]?.newValue) {
-    renderTechBar(changes[key].newValue);
-  }
-});
 
 const renderTechBar = (tech: typeof detectedTech) => {
   detectedTech = tech;
@@ -313,29 +294,25 @@ const loadUserPlan = async () => {
   const apiKey = await getApiKey();
   if (!apiKey) return;
 
-  const apiBase = typeof __API_BASE__ !== "undefined" ? __API_BASE__ : "http://localhost:4001/api";
   try {
-    const res = await fetch(`${apiBase}/usage`, { headers: { Authorization: `Bearer ${apiKey}` } });
-    const json = await res.json();
-    if (json.data) {
-      // Always check the API for plan status — don't rely on cached storage
-      if (json.data.plan === "pro") {
+    const response = await api.usage();
+    if ("data" in response) {
+      if (response.data.plan === "pro") {
         sonnetBtn.classList.remove("hidden");
-        const remaining = json.data.sonnetLimit - json.data.sonnetUsed;
+        const remaining = response.data.sonnetLimit - response.data.sonnetUsed;
         sonnetRemaining.textContent = `(${remaining} left)`;
       }
-      // Update local storage to keep it in sync
-      chrome.storage.local.set({ userPlan: json.data.plan });
+      chrome.storage.local.set({ userPlan: response.data.plan });
     }
   } catch {}
 };
 
 // Loading state management — prevents double-clicks
-let decoding = false;
+let isDecoding = false;
 const haikuBtn = document.getElementById("decode-haiku") as HTMLButtonElement;
 
 const setDecoding = (loading: boolean, phase?: string) => {
-  decoding = loading;
+  isDecoding = loading;
   haikuBtn.disabled = loading;
   sonnetBtn.disabled = loading;
   haikuBtn.textContent = loading ? (phase || "Decoding...") : "Decode (Haiku)";
@@ -344,16 +321,15 @@ const setDecoding = (loading: boolean, phase?: string) => {
 
 // Ask content script to resolve source maps
 const resolveSourceMaps = async (errorText: string): Promise<string> => {
+  if (!currentTabId) return errorText;
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) return errorText;
-
     return new Promise((resolve) => {
-      chrome.tabs.sendMessage(tab.id!, { type: "RESOLVE_SOURCEMAP", errorText }, (response) => {
+      // 5s timeout for content script source map resolution
+      const timer = setTimeout(() => resolve(errorText), 5000);
+      chrome.tabs.sendMessage(currentTabId!, { type: "RESOLVE_SOURCEMAP", errorText }, (response) => {
+        clearTimeout(timer);
         resolve(response?.resolved || errorText);
       });
-      // Timeout after 5 seconds
-      setTimeout(() => resolve(errorText), 5000);
     });
   } catch {
     return errorText;
@@ -363,26 +339,23 @@ const resolveSourceMaps = async (errorText: string): Promise<string> => {
 // Decode with Haiku
 haikuBtn.addEventListener("click", () => {
   const text = decodeInput.value.trim();
-  if (!text || decoding) return;
+  if (!text || isDecoding) return;
   decodeSingle(text, "haiku");
 });
 
 // Decode with Sonnet (Pro only)
 sonnetBtn.addEventListener("click", () => {
   const text = decodeInput.value.trim();
-  if (!text || decoding) return;
+  if (!text || isDecoding) return;
   decodeSingle(text, "sonnet");
 });
 
-const getApiKey = (): Promise<string | null> =>
-  new Promise((resolve) => chrome.storage.local.get("apiKey", (r) => resolve(r.apiKey || null)));
-
 const decodeSingle = async (errorText: string, model: "haiku" | "sonnet") => {
-  if (decoding) return;
+  if (isDecoding) return;
 
   const apiKey = await getApiKey();
   if (!apiKey) {
-    decodeResult.innerHTML = `<p style="color: var(--error-red);">API key not set. Open extension settings and paste your key.</p>`;
+    decodeResult.innerHTML = `<p class="error-msg">API key not set. Open extension settings and paste your key.</p>`;
     return;
   }
 
@@ -396,10 +369,8 @@ const decodeSingle = async (errorText: string, model: "haiku" | "sonnet") => {
   setDecoding(true, "Decoding...");
   decodeResult.innerHTML = `<div class="skeleton"></div><div class="skeleton short"></div><div class="skeleton"></div>`;
 
-  const apiBase = typeof __API_BASE__ !== "undefined" ? __API_BASE__ : "http://localhost:4001/api";
-
   try {
-    const response = await fetch(`${apiBase}/decode`, {
+    const response = await fetch(`${API_BASE}/decode`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({ errorText: enrichedText + getTechContext(), model }),
@@ -408,58 +379,14 @@ const decodeSingle = async (errorText: string, model: "haiku" | "sonnet") => {
     const json = await response.json();
 
     if (json.error) {
-      decodeResult.innerHTML = `<p style="color: var(--error-red);">${escapeHtml(json.error.message)}</p>`;
+      decodeResult.innerHTML = `<p class="error-msg">${escapeHtml(json.error.message)}</p>`;
       return;
     }
 
     renderMarkdown(json.data.markdown, decodeResult);
     decodeInput.classList.add("has-results");
   } catch {
-    decodeResult.innerHTML = `<p style="color: var(--error-red);">Failed to connect to API.</p>`;
-  } finally {
-    setDecoding(false);
-  }
-};
-
-const decodeBatch = async (errors: CapturedError[]) => {
-  if (decoding) return;
-
-  const apiKey = await getApiKey();
-  if (!apiKey) {
-    decodeResult.innerHTML = `<p style="color: var(--error-red);">API key not set.</p>`;
-    return;
-  }
-
-  setDecoding(true);
-  decodeResult.innerHTML = `<div class="skeleton"></div><div class="skeleton short"></div><div class="skeleton"></div><div class="skeleton short"></div>`;
-
-  const apiBase = typeof __API_BASE__ !== "undefined" ? __API_BASE__ : "http://localhost:4001/api";
-
-  try {
-    const response = await fetch(`${apiBase}/decode-batch`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        errors: errors.map((e) => ({
-          text: e.text,
-          level: e.level,
-          source: e.text.startsWith("Network") ? "network" : "console",
-        })),
-        techContext: getTechContext(),
-      }),
-    });
-
-    const json = await response.json();
-
-    if (json.error) {
-      decodeResult.innerHTML = `<p style="color: var(--error-red);">${escapeHtml(json.error.message)}</p>`;
-      return;
-    }
-
-    renderMarkdown(json.data.markdown, decodeResult);
-    decodeInput.classList.add("has-results");
-  } catch {
-    decodeResult.innerHTML = `<p style="color: var(--error-red);">Failed to connect to API.</p>`;
+    decodeResult.innerHTML = `<p class="error-msg">Failed to connect to API.</p>`;
   } finally {
     setDecoding(false);
   }
@@ -472,20 +399,17 @@ const decodeBatch = async (errors: CapturedError[]) => {
 const inspectBtn = document.getElementById("inspect-btn") as HTMLButtonElement;
 const inspectCancelBtn = document.getElementById("inspect-cancel") as HTMLButtonElement;
 
-const startInspect = async () => {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab?.id) {
-    chrome.tabs.sendMessage(tab.id, { type: "START_INSPECT" });
-    inspectBtn.textContent = "🔍 Click an element...";
-    inspectBtn.disabled = true;
-    inspectCancelBtn.classList.remove("hidden");
-  }
+const startInspect = () => {
+  if (!currentTabId) return;
+  chrome.tabs.sendMessage(currentTabId, { type: "START_INSPECT" });
+  inspectBtn.textContent = "🔍 Click an element...";
+  inspectBtn.disabled = true;
+  inspectCancelBtn.classList.remove("hidden");
 };
 
-const cancelInspect = async () => {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab?.id) {
-    chrome.tabs.sendMessage(tab.id, { type: "STOP_INSPECT" });
+const cancelInspect = () => {
+  if (currentTabId) {
+    chrome.tabs.sendMessage(currentTabId, { type: "STOP_INSPECT" });
   }
   inspectBtn.textContent = "🔍 Click to inspect an element";
   inspectBtn.disabled = false;
@@ -507,14 +431,6 @@ document.getElementById("inspect-new")!.addEventListener("click", () => {
 // ESC key cancels inspect from sidebar
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && !inspectCancelBtn.classList.contains("hidden")) {
-    cancelInspect();
-  }
-});
-
-// Listen for cancel from content script (user pressed ESC on page)
-chrome.storage.session.onChanged.addListener((changes) => {
-  // Inspect cancelled from page side
-  if (changes.selectedElement === undefined && !inspectCancelBtn.classList.contains("hidden")) {
     cancelInspect();
   }
 });
@@ -570,7 +486,7 @@ const showInspectResult = (el: any) => {
 
 const inspectAskBtn = document.getElementById("inspect-ask-btn") as HTMLButtonElement;
 inspectAskBtn.addEventListener("click", async () => {
-  const question = (document.getElementById("inspect-question") as HTMLInputElement).value.trim();
+  const question = (document.getElementById("inspect-question") as HTMLTextAreaElement).value.trim();
   if (!question || inspectAskBtn.disabled) return;
   inspectAskBtn.disabled = true;
   inspectAskBtn.textContent = "Thinking...";
@@ -605,14 +521,14 @@ ${selectedElement.outerHTML}${getTechContext()}`;
 
   const apiKey = await getApiKey();
   if (!apiKey) {
-    inspectResult.innerHTML = `<p style="color: var(--error-red);">API key not set.</p>`;
+    inspectResult.innerHTML = `<p class="error-msg">API key not set.</p>`;
+    inspectAskBtn.disabled = false;
+    inspectAskBtn.textContent = "Ask";
     return;
   }
 
-  const apiBase = typeof __API_BASE__ !== "undefined" ? __API_BASE__ : "http://localhost:4001/api";
-
   try {
-    const response = await fetch(`${apiBase}/decode`, {
+    const response = await fetch(`${API_BASE}/decode`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({ errorText: prompt, mode: "inspect" }),
@@ -620,21 +536,25 @@ ${selectedElement.outerHTML}${getTechContext()}`;
 
     const json = await response.json();
     if (json.error) {
-      inspectResult.innerHTML = `<p style="color: var(--error-red);">${escapeHtml(json.error.message)}</p>`;
+      inspectResult.innerHTML = `<p class="error-msg">${escapeHtml(json.error.message)}</p>`;
       return;
     }
 
     renderMarkdown(json.data.markdown, inspectResult);
   } catch {
-    inspectResult.innerHTML = `<p style="color: var(--error-red);">Failed to connect to API.</p>`;
+    inspectResult.innerHTML = `<p class="error-msg">Failed to connect to API.</p>`;
   } finally {
     inspectAskBtn.disabled = false;
     inspectAskBtn.textContent = "Ask";
   }
 });
 
+// Enter submits, Shift+Enter for newlines
 document.getElementById("inspect-question")!.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") document.getElementById("inspect-ask-btn")!.click();
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    document.getElementById("inspect-ask-btn")!.click();
+  }
 });
 
 // ============================================
@@ -655,45 +575,10 @@ const renderMarkdown = (markdown: string, container: HTMLElement) => {
     const btn = document.createElement("button");
     btn.className = "copy-btn";
     btn.textContent = "Copy";
-    btn.addEventListener("click", async () => {
-      const code = pre.textContent || "";
-      await navigator.clipboard.writeText(code);
-      btn.textContent = "Copied!";
-      setTimeout(() => { btn.textContent = "Copy"; }, 2000);
-    });
+    btn.addEventListener("click", () => copyToClipboard(btn, () => pre.textContent || ""));
     wrapper.appendChild(btn);
   });
 };
-
-// Basic markdown to HTML fallback (no external lib needed)
-const basicMarkdownToHtml = (md: string): string => {
-  return md
-    // Code blocks
-    .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code class="language-$1">$2</code></pre>')
-    // Inline code
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    // Headers
-    .replace(/^### (.+)$/gm, '<h4>$1</h4>')
-    .replace(/^## (.+)$/gm, '<h3>$1</h3>')
-    .replace(/^# (.+)$/gm, '<h2>$1</h2>')
-    // Bold
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    // Italic
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    // Unordered lists
-    .replace(/^- (.+)$/gm, '<li>$1</li>')
-    // Ordered lists
-    .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
-    // Wrap consecutive <li> in <ul>
-    .replace(/((?:<li>.*<\/li>\n?)+)/g, '<ul>$1</ul>')
-    // Paragraphs (lines not already tagged)
-    .replace(/^(?!<[hluop])((?!<).+)$/gm, '<p>$1</p>')
-    // Clean up extra newlines
-    .replace(/\n{2,}/g, '\n');
-};
-
-const escapeHtml = (text: string) =>
-  text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 // ============================================
 // Other UI

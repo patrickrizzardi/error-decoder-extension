@@ -29,8 +29,8 @@
     <div id="tab-errors" class="tab-content active">
       <div id="error-feed">
         <div id="empty-state" class="empty">
-          <p>Waiting for errors...</p>
-          <p class="empty-note">Captures console errors, failed network requests, and unhandled exceptions from your code. Some browser-level errors (ad blocker blocks, script parse errors from third-party scripts) may only appear in DevTools Console.</p>
+          <p>No errors captured yet</p>
+          <p class="empty-note">Console errors, failed network requests, and unhandled exceptions on this page will appear here automatically.</p>
         </div>
       </div>
       <div id="feed-actions" class="hidden">
@@ -72,27 +72,16 @@
           <button id="inspect-new" class="btn-secondary">🔍 Inspect new element</button>
         </div>
         <div id="element-info"></div>
+        <div class="textarea-grip" id="element-info-grip" style="margin-bottom: 6px;"><div class="textarea-grip-pill"></div></div>
         <div class="inspect-ask">
-          <input type="text" id="inspect-question" placeholder="How do I center this? Make it bigger? What does this do?" />
+          <div class="textarea-wrap">
+            <textarea id="inspect-question" rows="2" placeholder="How do I center this? Make it bigger? What does this do?"></textarea>
+            <div class="textarea-grip" id="inspect-question-grip"><div class="textarea-grip-pill"></div></div>
+          </div>
           <button id="inspect-ask-btn" class="btn-primary">Ask</button>
         </div>
         <div id="inspect-result"></div>
       </div>
-    </div>
-
-    <!-- RESULT OVERLAY — shown over any tab when decoding -->
-    <div id="result-overlay" class="hidden">
-      <div class="result-header">
-        <span id="result-title">AI Analysis</span>
-        <button id="back-from-result" class="icon-btn" title="Back">&larr;</button>
-      </div>
-      <div id="result-loading" class="hidden">
-        <div class="skeleton"></div>
-        <div class="skeleton short"></div>
-        <div class="skeleton"></div>
-        <div class="skeleton short"></div>
-      </div>
-      <div id="result-content"></div>
     </div>
 
     <!-- Footer -->

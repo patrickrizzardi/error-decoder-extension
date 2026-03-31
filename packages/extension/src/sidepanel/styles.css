@@ -131,6 +131,12 @@ body {
 .tab:hover { color: var(--text); }
 .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 
+.tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 2px;
+}
+
 .badge {
   display: inline-block;
   background: var(--error-red);
@@ -292,6 +298,13 @@ body {
 .btn-primary:hover { background: var(--accent-hover); }
 .btn-primary:disabled { opacity: 0.4; cursor: default; }
 
+.btn-primary:focus-visible,
+.btn-secondary:focus-visible,
+.btn-sonnet:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .btn-sonnet {
   padding: 6px 12px;
   background: var(--sonnet);
@@ -321,7 +334,14 @@ body {
 #inspect-start { padding: 16px; text-align: center; }
 .hint { font-size: 11px; color: var(--text-muted); margin-top: 8px; }
 
-#inspect-selected { padding: 10px; }
+#inspect-selected {
+  padding: 10px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
 
 #element-info {
   font-family: "Fira Code", Consolas, monospace;
@@ -331,9 +351,8 @@ body {
   border-radius: 4px;
   white-space: pre-wrap;
   word-break: break-word;
-  max-height: 120px;
+  height: 120px;
   overflow-y: auto;
-  margin-bottom: 8px;
 }
 
 .sourcemap-tip {
@@ -349,19 +368,24 @@ body {
 
 .inspect-toolbar { margin-bottom: 8px; }
 
-.inspect-ask { display: flex; gap: 6px; margin-bottom: 8px; }
+.inspect-ask { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.inspect-ask .btn-primary { flex: none; }
 
 #inspect-question {
-  flex: 1;
+  width: 100%;
   padding: 6px 8px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 11px;
+  resize: none;
+  min-height: 32px;
 }
 
 #inspect-question:focus { outline: none; border-color: var(--accent); }
+#inspect-question::-webkit-resizer { display: none; }
 
 /* Result overlay */
 #result-overlay {
@@ -546,5 +570,8 @@ body {
 
 .footer a { color: var(--accent); text-decoration: none; }
 .footer a:hover { text-decoration: underline; }
+
+/* Error messages */
+.error-msg { color: var(--error-red); }
 
 .hidden { display: none !important; }
