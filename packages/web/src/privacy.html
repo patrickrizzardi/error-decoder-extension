@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy — ErrorDecoder</title>
+  <meta name="description" content="ErrorDecoder privacy policy. Learn how we handle your data.">
+
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --card-bg: #1e1e1e;
+      --text: #e4e4e4;
+      --text-muted: #808080;
+      --accent: #569cd6;
+      --accent-hover: #6cb0f0;
+      --border: #3e3e3e;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 0;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 40px;
+    }
+
+    .logo {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .back-link {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .back-link:hover {
+      color: var(--accent);
+    }
+
+    h1 {
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+
+    .meta {
+      color: var(--text-muted);
+      font-size: 14px;
+      margin-bottom: 32px;
+    }
+
+    h2 {
+      font-size: 18px;
+      margin-top: 32px;
+      margin-bottom: 12px;
+      color: var(--accent);
+    }
+
+    h2:first-of-type {
+      margin-top: 0;
+    }
+
+    p {
+      margin-bottom: 12px;
+    }
+
+    ul {
+      margin-left: 20px;
+      margin-bottom: 12px;
+    }
+
+    li {
+      margin-bottom: 8px;
+    }
+
+    strong {
+      color: var(--text);
+    }
+
+    code {
+      background: var(--card-bg);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .contact {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      margin-top: 40px;
+      text-align: center;
+    }
+
+    .contact-link {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .contact-link:hover {
+      text-decoration: underline;
+    }
+
+    footer {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 12px;
+      padding: 40px 0 20px;
+      border-top: 1px solid var(--border);
+      margin-top: 60px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <a href="/" class="logo">ErrorDecoder</a>
+      <a href="/" class="back-link">← Back to Home</a>
+    </header>
+
+    <main>
+      <h1>Privacy Policy</h1>
+      <p class="meta">Last updated: March 2026</p>
+
+      <h2>What We Collect</h2>
+      <p>When you use ErrorDecoder, we collect:</p>
+      <ul>
+        <li><strong>Email address</strong> — Required to create your account and manage your subscription</li>
+        <li><strong>Error text you decode</strong> — The error message or stack trace you explicitly select and send for AI analysis</li>
+        <li><strong>Usage data</strong> — How many decodes you've used today, for rate limiting and billing</li>
+        <li><strong>Payment information</strong> — Processed by Stripe (we never see your card number or full payment details)</li>
+      </ul>
+
+      <h2>What We Don't Collect</h2>
+      <p>ErrorDecoder does not collect:</p>
+      <ul>
+        <li>Your source code or files</li>
+        <li>Your browsing history or page visits you don't decode</li>
+        <li>Page content you don't explicitly select for decoding</li>
+        <li>Cookies for tracking or analytics (no third-party trackers)</li>
+        <li>Device identifiers or user fingerprinting data</li>
+      </ul>
+
+      <h2>How We Use Your Data</h2>
+      <p><strong>Error text analysis:</strong> When you decode an error, we send it to Claude AI (Anthropic) for analysis to generate the explanation. We never store your error text for longer than needed to generate the response, except:</p>
+      <ul>
+        <li>Pro users: Decode history is saved for 90 days so you can review past decodes</li>
+        <li>Response caching: Common errors may be cached without personal identifiers to provide faster responses</li>
+      </ul>
+      <p><strong>Email:</strong> Used only for account management, password resets, and important product updates. We will never spam you or sell your email.</p>
+      <p><strong>Usage data:</strong> Aggregated to understand how the product is used and to detect abuse.</p>
+      <p><strong>We do not sell your data to anyone.</strong></p>
+
+      <h2>Third-Party Services</h2>
+      <p>ErrorDecoder uses these third-party services. Their privacy policies apply to data processed by them:</p>
+      <ul>
+        <li><strong>Supabase</strong> — Authentication and database hosting. <a href="https://supabase.com/privacy" class="contact-link">Privacy policy</a></li>
+        <li><strong>Anthropic</strong> — AI processing (Claude). <a href="https://www.anthropic.com/privacy" class="contact-link">Privacy policy</a></li>
+        <li><strong>Stripe</strong> — Payment processing. <a href="https://stripe.com/privacy" class="contact-link">Privacy policy</a></li>
+        <li><strong>Vercel</strong> — Web hosting. <a href="https://vercel.com/legal/privacy-policy" class="contact-link">Privacy policy</a></li>
+      </ul>
+
+      <h2>Data Retention</h2>
+      <ul>
+        <li><strong>Account data:</strong> Kept until you delete your account. You can delete your account anytime in Settings → Delete Account.</li>
+        <li><strong>Decode history:</strong> Pro users: retained for 90 days. Free tier: not saved.</li>
+        <li><strong>Cached responses:</strong> Common error responses are cached to improve speed. These caches contain no personal information.</li>
+        <li><strong>Payment records:</strong> Retained as required by law (typically 7 years for accounting/tax purposes)</li>
+      </ul>
+
+      <h2>Your Privacy Rights</h2>
+      <ul>
+        <li><strong>Delete your account:</strong> Go to Settings → Delete Account. All your data will be permanently removed.</li>
+        <li><strong>Export your data:</strong> Email <a href="mailto:patrick@errordecoder.dev" class="contact-link">patrick@errordecoder.dev</a> to request a download of your data.</li>
+        <li><strong>GDPR (EU users):</strong> You have the right to access, rectify, or request erasure of your data. Email us to exercise these rights.</li>
+        <li><strong>CCPA (California users):</strong> You have the right to know what data is collected and to delete it. Contact us for requests.</li>
+      </ul>
+
+      <h2>Chrome Extension Permissions</h2>
+      <p>ErrorDecoder requests the following browser permissions and uses them only as described:</p>
+      <ul>
+        <li><strong>webRequest + host_permissions (&lt;all_urls&gt;)</strong> — Used to detect failed network requests (4xx, 5xx, CORS errors) on the current page. We monitor HTTP status codes only — we do not read request bodies, headers, cookies, or response content.</li>
+        <li><strong>storage</strong> — Stores your API key, user preferences, and captured errors locally in your browser. This data stays on your device.</li>
+        <li><strong>activeTab</strong> — Used to inject the debugging sidebar into the current page when you activate the extension.</li>
+        <li><strong>contextMenus</strong> — Adds the "Decode this error" option to your right-click menu.</li>
+        <li><strong>sidePanel</strong> — Registers the sidebar panel with Chrome.</li>
+      </ul>
+
+      <h2>Security</h2>
+      <p>All data transmitted between the extension and our servers uses HTTPS encryption. Passwords are hashed by Supabase before storage (bcrypt). API keys are randomly generated 32-byte hex strings. We never transmit data over unencrypted connections.</p>
+      <p>If you suspect a security issue, please email <a href="mailto:patrick@errordecoder.dev" class="contact-link">patrick@errordecoder.dev</a> immediately.</p>
+
+      <h2>Changes to This Policy</h2>
+      <p>We may update this privacy policy occasionally. If we make material changes, we'll notify you via email. Continued use of ErrorDecoder means you accept the updated policy.</p>
+
+      <h2>Contact</h2>
+      <p>Questions about your privacy or this policy? Email us at <a href="mailto:patrick@errordecoder.dev" class="contact-link">patrick@errordecoder.dev</a></p>
+    </main>
+
+    <footer>
+      <p>&copy; 2026 ErrorDecoder. All rights reserved.</p>
+      <p><a href="/terms" class="contact-link">Terms of Service</a> • <a href="/privacy" class="contact-link">Privacy Policy</a></p>
+    </footer>
+  </div>
+</body>
+</html>

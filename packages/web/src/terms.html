@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Terms of Service — ErrorDecoder</title>
+  <meta name="description" content="ErrorDecoder terms of service. Read our legal agreement before using the extension.">
+
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --card-bg: #1e1e1e;
+      --text: #e4e4e4;
+      --text-muted: #808080;
+      --accent: #569cd6;
+      --accent-hover: #6cb0f0;
+      --border: #3e3e3e;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 0;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 40px;
+    }
+
+    .logo {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .back-link {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .back-link:hover {
+      color: var(--accent);
+    }
+
+    h1 {
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+
+    .meta {
+      color: var(--text-muted);
+      font-size: 14px;
+      margin-bottom: 32px;
+    }
+
+    h2 {
+      font-size: 18px;
+      margin-top: 32px;
+      margin-bottom: 12px;
+      color: var(--accent);
+    }
+
+    h2:first-of-type {
+      margin-top: 0;
+    }
+
+    p {
+      margin-bottom: 12px;
+    }
+
+    ul {
+      margin-left: 20px;
+      margin-bottom: 12px;
+    }
+
+    li {
+      margin-bottom: 8px;
+    }
+
+    strong {
+      color: var(--text);
+    }
+
+    code {
+      background: var(--card-bg);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .contact {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      margin-top: 40px;
+      text-align: center;
+    }
+
+    .contact-link {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .contact-link:hover {
+      text-decoration: underline;
+    }
+
+    footer {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 12px;
+      padding: 40px 0 20px;
+      border-top: 1px solid var(--border);
+      margin-top: 60px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <a href="/" class="logo">ErrorDecoder</a>
+      <a href="/" class="back-link">← Back to Home</a>
+    </header>
+
+    <main>
+      <h1>Terms of Service</h1>
+      <p class="meta">Last updated: March 2026</p>
+
+      <h2>1. Service Description</h2>
+      <p>ErrorDecoder is an AI-powered Chrome extension that analyzes error messages and stack traces you select on any webpage and provides AI-generated explanations and solutions. The service is available on a free tier (limited) and Pro paid subscription.</p>
+
+      <h2>2. Eligibility</h2>
+      <p>You must be at least 13 years old to use ErrorDecoder. By using this service, you confirm that you meet this requirement and that you agree to be bound by these terms.</p>
+
+      <h2>3. Accounts</h2>
+      <p>You are responsible for:</p>
+      <ul>
+        <li>Keeping your email and password confidential</li>
+        <li>All activity under your account</li>
+        <li>Notifying us immediately if you suspect unauthorized access</li>
+      </ul>
+      <p>One account per person. Shared accounts or accounts created by automated means violate these terms. We reserve the right to terminate accounts that violate this policy.</p>
+
+      <h2>4. Free Tier</h2>
+      <p><strong>Current limits:</strong> 3 decodes per day. <strong>Input size limit:</strong> 1,000 characters per decode.</p>
+      <p>Free tier features and limits may change at any time without notice. ErrorDecoder is provided on an "as-is" basis with no guarantees of availability or performance.</p>
+
+      <h2>5. Pro Subscription</h2>
+      <p><strong>Pricing:</strong> $9 per month or $79 per year, billed through Stripe.</p>
+      <p><strong>What's included:</strong> Unlimited decodes, unlimited input size, full decode history, deep analysis feature (up to 20 per month with Claude Sonnet).</p>
+      <p><strong>Billing:</strong> Charges will be processed on the date you subscribe and then on the same date each month or year. You can view and update your billing information in your account settings.</p>
+      <p><strong>Cancellation:</strong> You can cancel your subscription anytime in Settings → Billing. Your access continues until the end of your current billing period. No refunds are issued for partial months or years, except at our discretion for exceptional circumstances. Email <a href="mailto:patrick@errordecoder.dev" class="contact-link">patrick@errordecoder.dev</a> if you believe a refund is warranted.</p>
+      <p><strong>Price changes:</strong> We may adjust Pro pricing with 30 days' notice. Continued use after the notice period means you accept the new price.</p>
+
+      <h2>6. Acceptable Use</h2>
+      <p>You agree not to:</p>
+      <ul>
+        <li>Reverse-engineer, decompile, or attempt to access the underlying source code or algorithms</li>
+        <li>Use the API in ways that exceed reasonable rate limits or cause excessive load</li>
+        <li>Attempt to breach, bypass, or circumvent any security measures</li>
+        <li>Use ErrorDecoder for illegal purposes or to violate any laws</li>
+        <li>Share your API key with others (one key per account)</li>
+        <li>Automate access in ways not explicitly permitted (no bulk API scraping)</li>
+      </ul>
+      <p>Violations may result in immediate account suspension or termination.</p>
+
+      <h2>7. AI-Generated Content Disclaimer</h2>
+      <p><strong>Important:</strong> ErrorDecoder uses artificial intelligence to generate explanations and code fixes. AI systems can make mistakes.</p>
+      <ul>
+        <li>AI-generated responses may contain errors, outdated information, or suboptimal solutions</li>
+        <li>ErrorDecoder is a debugging aid and learning tool, <strong>not a guarantee of correctness</strong></li>
+        <li><strong>Always verify AI suggestions before applying fixes to production code</strong></li>
+        <li>Test thoroughly in a development environment first</li>
+      </ul>
+      <p>We are not liable for any problems caused by following AI-generated advice.</p>
+
+      <h2>8. Intellectual Property</h2>
+      <p>ErrorDecoder, including the extension code, interface, and design, is owned by Patrick Rizzardi. You may use ErrorDecoder for personal, non-commercial purposes only. You may not copy, modify, or distribute the extension without permission.</p>
+      <p>Error text and responses you generate are yours to use as you see fit, including in your own code.</p>
+
+      <h2>9. Limitation of Liability</h2>
+      <p><strong>The service is provided "as is" without warranties.</strong> We are not liable for:</p>
+      <ul>
+        <li>Damages caused by following AI-generated suggestions</li>
+        <li>Data loss, corruption, or security breaches</li>
+        <li>Service interruptions, downtime, or unavailability</li>
+        <li>Any indirect, incidental, or consequential damages</li>
+      </ul>
+      <p><strong>Our total liability is limited to the amount you paid in the last 12 months.</strong> If you paid nothing (free tier), our liability is $0.</p>
+
+      <h2>10. Indemnification</h2>
+      <p>You agree to defend, indemnify, and hold harmless ErrorDecoder (Patrick Rizzardi) from any claims, damages, or costs arising from your use of the service, violation of these terms, or infringement of any rights.</p>
+
+      <h2>11. Third-Party Services</h2>
+      <p>ErrorDecoder uses third-party services including Supabase, Anthropic, Stripe, and Vercel. Your use of these services is subject to their terms and privacy policies. We are not responsible for their operations or data handling.</p>
+
+      <h2>12. Changes to Terms</h2>
+      <p>We may update these terms at any time. Material changes will be announced via email with 30 days' notice. Continued use of ErrorDecoder after the notice period means you accept the new terms.</p>
+
+      <h2>13. Termination</h2>
+      <p>We may terminate or suspend your account immediately for:</p>
+      <ul>
+        <li>Violation of these terms</li>
+        <li>Abuse of the service or API</li>
+        <li>Illegal activity</li>
+        <li>Non-payment of Pro subscriptions</li>
+      </ul>
+      <p>Upon termination, your right to use ErrorDecoder ends immediately. Your decode history may be deleted.</p>
+
+      <h2>14. Dispute Resolution</h2>
+      <p>Any disputes arising from these terms or your use of ErrorDecoder will be resolved informally through good-faith discussion. If we cannot resolve a dispute within 30 days, either party may pursue legal action.</p>
+
+      <h2>15. Governing Law</h2>
+      <p>These terms are governed by the laws of the United States, without regard to conflict-of-law principles. You agree to submit to the jurisdiction of courts in the United States for any disputes.</p>
+
+      <h2>16. Entire Agreement</h2>
+      <p>These terms, together with our Privacy Policy, constitute the entire agreement between you and ErrorDecoder regarding your use of the service.</p>
+
+      <h2>Contact</h2>
+      <p>Questions about these terms or your rights? Email us at <a href="mailto:patrick@errordecoder.dev" class="contact-link">patrick@errordecoder.dev</a></p>
+    </main>
+
+    <footer>
+      <p>&copy; 2026 ErrorDecoder. All rights reserved.</p>
+      <p><a href="/terms" class="contact-link">Terms of Service</a> • <a href="/privacy" class="contact-link">Privacy Policy</a></p>
+    </footer>
+  </div>
+</body>
+</html>
