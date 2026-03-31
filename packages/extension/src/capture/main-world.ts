@@ -2,16 +2,12 @@
 // Declared in manifest with "world": "MAIN"
 // Chrome injects this directly — bypasses CSP
 
+// Data flow: intercept console/fetch/XHR → emit CustomEvent → relay.ts picks it up
+
 if (!(window as any).__errorDecoderActive) {
   (window as any).__errorDecoderActive = true;
 
-  // Buffer for errors that fire before content script is ready
-  (window as any).__errorDecoderBuffer = [] as Array<{ level: string; text: string }>;
-
   const emit = (level: string, text: string) => {
-    // Always buffer (content script will drain on load)
-    (window as any).__errorDecoderBuffer.push({ level, text });
-    // Also dispatch event (content script picks up if already listening)
     document.dispatchEvent(
       new CustomEvent("errordecoder-error", { detail: { level, text } })
     );
