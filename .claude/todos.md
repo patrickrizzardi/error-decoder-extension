@@ -56,11 +56,14 @@ Build an always-on AI debugging sidebar Chrome extension. Real-time error stream
 
 ## Remaining Phases
 
-### Phase 4: Auth Flow
-- [ ] 4.1 Supabase Auth config (email/pass + Google OAuth)
-- [ ] 4.2 Auth web page — scaffolded, needs testing end-to-end
-- [ ] 4.3 Extension ↔ web auth handshake (automatic API key storage)
-- [x] 4.5 Manual API key paste — working (options page)
+### Phase 4: Auth Flow (MVP — email/password only)
+- [ ] 4.1 Supabase Auth config (enable email provider, disable email confirmation for instant signup)
+- [ ] 4.2 Wire auth.html placeholders (%%SUPABASE_URL%%, %%SUPABASE_PUBLISHABLE_KEY%%, %%API_BASE%%) via web server
+- [ ] 4.3 Add "Sign Up" button in sidebar decode tab (shows when no API key, opens errordecoder.dev/auth in new tab)
+- [ ] 4.4 Add chrome.runtime.onMessageExternal listener in background (receives AUTH_SUCCESS from web page)
+- [ ] 4.5 Pin extension ID in manifest.json for dev (needed for web → extension messaging)
+- [ ] 4.6 Test full flow: sidebar → sign up → auth page → extension gets API key → decode works
+- [x] 4.7 Manual API key paste — working (options page, fallback)
 
 ### Phase 7: Usage Tracking UI
 - [ ] 7.1 Free tier limit enforced in sidebar UI (3/day)
@@ -95,3 +98,36 @@ Build an always-on AI debugging sidebar Chrome extension. Real-time error stream
 - [ ] 13.2 Security scan (no secrets in code)
 - [ ] 13.3 Quality checklist pass
 - [x] 13.4 Code audit findings addressed
+
+---
+
+## MVP2 — Post-Launch Priority (ship these within first week)
+
+### M2.1 Google OAuth (PRIORITY #1)
+- [ ] Create Google Cloud project + OAuth consent screen + credentials
+- [ ] Configure Google provider in Supabase Auth dashboard
+- [ ] Get stable extension ID from Chrome Web Store (upload stub if needed)
+- [ ] Add Google OAuth redirect URL to Supabase
+- [ ] Update auth.html Google button to use real Supabase OAuth flow
+- [ ] Test full Google OAuth flow: extension → auth page → Google consent → back to extension
+- **Why first**: 20-35% more signups. Devs are already logged into Google in Chrome — it's one click.
+
+### M2.2 Usage Limit UI in Sidebar
+- [ ] Show "2 of 3 free decodes remaining" after each decode
+- [ ] Upgrade CTA when limit hit ("Upgrade to Pro for unlimited decodes")
+- [ ] Sonnet remaining count for Pro users
+
+### M2.3 Stripe Upgrade Flow from Extension
+- [ ] "Upgrade" button in sidebar → opens checkout page → re-checks plan after return
+
+---
+
+## Future Features (post-MVP2, roadmap ideas)
+
+### GitHub Repo Integration (premium feature)
+- Connect GitHub account via OAuth
+- When decoding errors on localhost, search user's actual repo for relevant files
+- AI gets real source code context → responses reference THEIR code specifically
+- Huge differentiator — no competing tool does this
+- Could justify a "Super Pro" tier ($29/mo?) or be a Pro-only feature
+- Needs: GitHub OAuth, GitHub API search, repo indexing strategy, token/scope management

@@ -1,0 +1,1 @@
+{"manifest_version":3,"name":"ErrorDecoder","version":"0.0.1","description":"AI-powered debugging sidebar for developers. Captures console errors, network failures, and unhandled exceptions in real-time. Decode errors with AI, inspect elements, detect tech stacks, and resolve source maps — all from a sidebar that lives on the page.","icons":{"128":"icon-128.png"}}
