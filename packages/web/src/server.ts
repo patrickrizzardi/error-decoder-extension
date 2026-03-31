@@ -5,7 +5,7 @@
 const envReplacements: Record<string, string> = {
   "%%SUPABASE_URL%%": process.env.SUPABASE_URL ?? "",
   "%%SUPABASE_PUBLISHABLE_KEY%%": process.env.SUPABASE_PUBLISHABLE_KEY ?? "",
-  "%%API_BASE%%": process.env.APP_URL ?? "http://localhost:5000",
+  "%%API_BASE%%": process.env.API_URL ?? "http://localhost:4001",
   "%%EXTENSION_ID%%": process.env.EXTENSION_ID ?? "",
 };
 
