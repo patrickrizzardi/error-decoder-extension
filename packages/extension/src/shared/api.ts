@@ -8,6 +8,7 @@ import type {
 import { storage } from "./storage";
 
 declare const __API_BASE__: string;
+declare const __AUTH_URL__: string;
 
 // In dev: localhost. In production: errordecoder.dev
 // Set at build time via build.ts define
@@ -15,6 +16,11 @@ export const API_BASE =
   typeof __API_BASE__ !== "undefined"
     ? __API_BASE__
     : "http://localhost:4001/api";
+
+export const AUTH_URL =
+  typeof __AUTH_URL__ !== "undefined"
+    ? __AUTH_URL__
+    : "http://localhost:4000/auth";
 
 const getHeaders = async (): Promise<HeadersInit> => {
   const apiKey = await storage.get("apiKey");

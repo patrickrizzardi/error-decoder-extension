@@ -112,6 +112,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true;
 });
 
+// External messages from web auth page
+chrome.runtime.onMessageExternal.addListener((message, _sender, sendResponse) => {
+  if (message.type === "AUTH_SUCCESS") {
+    chrome.storage.local.set({
+      apiKey: message.apiKey,
+      userEmail: message.email,
+      userPlan: message.plan,
+    });
+    sendResponse({ received: true });
+  }
+  return true;
+});
+
 // ============================================
 // Error storage — per-tab
 // ============================================
