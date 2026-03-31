@@ -1,6 +1,9 @@
 // Content script — runs on every page (ISOLATED world)
 // Error relay handled by relay.ts (document_start)
-// This script: panel UI, inspector, tech detection, source map resolution
+// Runs in ISOLATED world at document_idle. By this point:
+// - main-world.ts has intercepted console/fetch/XHR (MAIN world, document_start)
+// - relay.ts is forwarding CustomEvents to background (ISOLATED world, document_start)
+// This script handles: panel UI, inspector, tech detection, source map resolution
 
 import { showPanel, hidePanel, isPanelVisible } from "./panel";
 import { startInspecting, stopInspecting } from "./inspector";
@@ -27,6 +30,17 @@ if (document.readyState === "complete") {
 
 // Listen for messages from background worker
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  // Resolve source maps for a stack trace — async handler, must return true
+  if (message.type === "RESOLVE_SOURCEMAP") {
+    resolveStackTrace(message.errorText).then((resolved) => {
+      sendResponse({ resolved });
+    }).catch(() => {
+      sendResponse({ resolved: message.errorText }); // Return original on failure
+    });
+    return true; // Keep channel open for async response
+  }
+
+  // Synchronous handlers — no return true needed
   if (message.type === "GET_PAGE_CONTEXT") {
     const tech = detectTechStack();
     sendResponse({
@@ -47,16 +61,4 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
   if (message.type === "START_INSPECT") { startInspecting(); sendResponse({ started: true }); }
   if (message.type === "STOP_INSPECT") { stopInspecting(); sendResponse({ stopped: true }); }
-
-  // Resolve source maps for a stack trace
-  if (message.type === "RESOLVE_SOURCEMAP") {
-    resolveStackTrace(message.errorText).then((resolved) => {
-      sendResponse({ resolved });
-    }).catch(() => {
-      sendResponse({ resolved: message.errorText }); // Return original on failure
-    });
-    return true; // Keep channel open for async response
-  }
-
-  return true;
 });

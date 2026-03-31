@@ -1,15 +1,16 @@
 // Element inspector — hover to highlight, click to select, capture element info
 
-let inspecting = false;
+let isInspecting = false;
 let overlay: HTMLDivElement | null = null;
 let hoveredElement: HTMLElement | null = null;
+let rafId: number | null = null;
 
 const OVERLAY_COLOR = "rgba(86, 156, 214, 0.2)";
 const OVERLAY_BORDER = "rgba(86, 156, 214, 0.8)";
 
 export const startInspecting = () => {
-  if (inspecting) return;
-  inspecting = true;
+  if (isInspecting) return;
+  isInspecting = true;
 
   // Create highlight overlay
   overlay = document.createElement("div");
@@ -35,8 +36,10 @@ export const startInspecting = () => {
 };
 
 export const stopInspecting = () => {
-  if (!inspecting) return;
-  inspecting = false;
+  if (!isInspecting) return;
+  isInspecting = false;
+
+  if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
 
   overlay?.remove();
   overlay = null;
@@ -60,8 +63,10 @@ const onMouseMove = (e: MouseEvent) => {
 
   hoveredElement = target;
 
-  if (overlay) {
-    const rect = target.getBoundingClientRect();
+  if (rafId !== null) cancelAnimationFrame(rafId);
+  rafId = requestAnimationFrame(() => {
+    if (!overlay || !hoveredElement) return;
+    const rect = hoveredElement.getBoundingClientRect();
     Object.assign(overlay.style, {
       display: "block",
       top: `${rect.top}px`,
@@ -69,7 +74,8 @@ const onMouseMove = (e: MouseEvent) => {
       width: `${rect.width}px`,
       height: `${rect.height}px`,
     });
-  }
+    rafId = null;
+  });
 };
 
 const onClick = async (e: MouseEvent) => {
@@ -180,6 +186,7 @@ const getMatchedCSSRules = (el: HTMLElement): Array<{ selector: string; file: st
   const matched: Array<{ selector: string; file: string; properties: string }> = [];
 
   try {
+    let ruleCount = 0;
     for (const sheet of document.styleSheets) {
       let rules: CSSRuleList;
       try {
@@ -193,6 +200,8 @@ const getMatchedCSSRules = (el: HTMLElement): Array<{ selector: string; file: st
         : "inline";
 
       for (const rule of rules) {
+        // Cap at 500 CSS rules to prevent blocking on heavy pages (MUI, Ant Design)
+        if (ruleCount++ > 500) break;
         if (rule instanceof CSSStyleRule) {
           try {
             if (el.matches(rule.selectorText)) {
@@ -214,6 +223,7 @@ const getMatchedCSSRules = (el: HTMLElement): Array<{ selector: string; file: st
           }
         }
       }
+      if (ruleCount > 500) break;
     }
   } catch {
     // Stylesheet access failed
@@ -303,11 +313,17 @@ const getCSSSourceFiles = async (cssFilename: string): Promise<string[]> => {
       return [];
     }
 
-    // Fetch the CSS file to find sourceMappingURL
-    const cssResponse = await fetch(cssUrl);
-    if (!cssResponse.ok) { cssMapCache.set(cssFilename, null); return []; }
-
-    const cssText = await cssResponse.text();
+    // Fetch the CSS file to find sourceMappingURL (try range request first — comment is always at the end)
+    let cssText: string;
+    const rangeResponse = await fetch(cssUrl, { headers: { Range: "bytes=-512" } });
+    if (rangeResponse.status === 206) {
+      cssText = await rangeResponse.text();
+    } else if (rangeResponse.status === 200) {
+      cssText = await rangeResponse.text();
+    } else {
+      cssMapCache.set(cssFilename, null);
+      return [];
+    }
     const urlMatch = cssText.match(/\/\*[#@]\s*sourceMappingURL=(.+?)\s*\*\//);
 
     if (!urlMatch) { cssMapCache.set(cssFilename, null); return []; }

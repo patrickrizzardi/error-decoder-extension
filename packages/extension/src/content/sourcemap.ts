@@ -22,6 +22,9 @@ type SourceMapData = {
 // Cache fetched source maps
 const mapCache = new Map<string, SourceMapData | null>();
 
+// Cache decoded mapping segments (decoding is CPU-intensive for large bundles)
+const decodedCache = new Map<string, MappingSegment[][]>();
+
 // Parse a stack trace and resolve source maps for each frame
 export const resolveStackTrace = async (errorText: string): Promise<string> => {
   // Extract stack trace lines with file:line:col references
@@ -83,8 +86,12 @@ const resolveFrame = async (
   const map = await fetchSourceMap(scriptUrl);
   if (!map) return null;
 
-  // Decode the VLQ mappings to find the original position
-  const decoded = decodeMappings(map.mappings);
+  // Decode the VLQ mappings to find the original position (cached — decoding is expensive)
+  let decoded = decodedCache.get(scriptUrl);
+  if (!decoded) {
+    decoded = decodeMappings(map.mappings);
+    decodedCache.set(scriptUrl, decoded);
+  }
   const originalPos = findOriginalPosition(decoded, line - 1, col - 1);
 
   if (!originalPos) return null;
@@ -111,14 +118,17 @@ const fetchSourceMap = async (scriptUrl: string): Promise<SourceMapData | null> 
   if (mapCache.has(scriptUrl)) return mapCache.get(scriptUrl) || null;
 
   try {
-    // First fetch the script to find the sourceMappingURL
-    const scriptResponse = await fetch(scriptUrl);
-    if (!scriptResponse.ok) {
+    // Try range request first — sourceMappingURL is always at the end of the file
+    let scriptText: string;
+    const rangeResponse = await fetch(scriptUrl, { headers: { Range: "bytes=-512" } });
+    if (rangeResponse.status === 206) {
+      scriptText = await rangeResponse.text();
+    } else if (rangeResponse.status === 200) {
+      scriptText = await rangeResponse.text();
+    } else {
       mapCache.set(scriptUrl, null);
       return null;
     }
-
-    const scriptText = await scriptResponse.text();
 
     // Find sourceMappingURL
     const urlMatch = scriptText.match(/\/\/[#@]\s*sourceMappingURL=(.+?)(?:\s|$)/);
@@ -192,15 +202,24 @@ type MappingSegment = {
 };
 
 const VLQ_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const VLQ_LOOKUP = new Uint8Array(128).fill(255);
+for (let i = 0; i < VLQ_CHARS.length; i++) {
+  VLQ_LOOKUP[VLQ_CHARS.charCodeAt(i)] = i;
+}
 
+// VLQ (Variable-Length Quantity) decoder for source maps
+// Each Base64 character encodes 6 bits:
+// - Bit 5 (0x20): continuation flag (more characters follow for this value)
+// - Bits 0-4 (0x1F): 5 value bits per character
+// - Bit 0 of the final assembled value: sign (0 = positive, 1 = negative)
 const decodeVLQ = (encoded: string): number[] => {
   const values: number[] = [];
   let shift = 0;
   let value = 0;
 
   for (const char of encoded) {
-    const digit = VLQ_CHARS.indexOf(char);
-    if (digit === -1) continue;
+    const digit = VLQ_LOOKUP[char.charCodeAt(0)];
+    if (digit === undefined || digit === 255) continue;
 
     const cont = digit & 32;
     value += (digit & 31) << shift;

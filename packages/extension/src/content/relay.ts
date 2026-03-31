@@ -2,6 +2,9 @@
 // Catches CustomEvents from main world capture script immediately
 // No DOM manipulation, no imports — just relay errors to background
 
+// Data flow: main-world capture.ts emits CustomEvent → this relay catches it →
+// sends to background service worker via chrome.runtime.sendMessage → stored per tab
+
 document.addEventListener("errordecoder-error", ((event: CustomEvent) => {
   chrome.runtime.sendMessage({
     type: "CAPTURED_ERROR",

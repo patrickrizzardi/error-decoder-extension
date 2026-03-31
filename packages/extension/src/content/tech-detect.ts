@@ -11,6 +11,10 @@ export type DetectedTech = {
 
 let cachedTech: DetectedTech[] | null = null;
 
+// Clear stale cache on SPA navigation (content script persists across route changes)
+window.addEventListener("popstate", () => { cachedTech = null; });
+window.addEventListener("hashchange", () => { cachedTech = null; });
+
 export const detectTechStack = (): DetectedTech[] => {
   if (cachedTech) return cachedTech;
 
