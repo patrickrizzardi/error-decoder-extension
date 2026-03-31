@@ -91,7 +91,7 @@ export const rateLimitMiddleware = async (c: Context, next: Next) => {
           message: "Daily limit reached. Upgrade to Pro for unlimited decodes.",
           code: errorCodes.rateLimited,
         },
-        upgradeUrl: "https://errordecoder.dev/#pricing",
+        upgradeUrl: `${process.env.APP_URL}/#pricing`,
       },
       429
     );

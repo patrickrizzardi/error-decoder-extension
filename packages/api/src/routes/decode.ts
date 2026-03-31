@@ -38,7 +38,7 @@ decodeRoute.post("/", authMiddleware, rateLimitMiddleware, async (c) => {
         message: "Free tier limited to 1,000 characters. Upgrade to Pro for unlimited.",
         code: errorCodes.inputTooLong,
       },
-      upgradeUrl: "https://errordecoder.dev/#pricing",
+      upgradeUrl: `${process.env.APP_URL}/#pricing`,
     }, 400);
   }
 

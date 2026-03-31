@@ -65,8 +65,8 @@ checkoutRoute.post("/", authMiddleware, async (c) => {
     client_reference_id: user.id,
     mode: "subscription",
     line_items: [{ price: price.id, quantity: 1 }],
-    success_url: `https://errordecoder.dev/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: "https://errordecoder.dev/#pricing",
+    success_url: `${process.env.APP_URL}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${process.env.APP_URL}/#pricing`,
     subscription_data: {
       metadata: { userId: user.id },
     },
