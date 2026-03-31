@@ -1,11 +1,11 @@
 // DevTools panel — displays captured errors and decodes them
 // Errors are captured automatically by the content script (always on)
 
-type CapturedError = {
-  text: string;
-  level: "error" | "warning";
-  timestamp: number;
-};
+import { escapeHtml } from "../shared/html";
+import { copyToClipboard } from "../shared/ui";
+import { getApiKey } from "../shared/storage";
+import { api } from "../shared/api";
+import type { CapturedError } from "@shared/types";
 
 const errors: CapturedError[] = [];
 
@@ -88,22 +88,14 @@ const selectItem = (item: HTMLElement) => {
   item.classList.add("selected");
 };
 
-const escapeHtml = (text: string) =>
-  text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-
 // ============================================
 // Decode
 // ============================================
 
-const getApiKey = (): Promise<string | null> =>
-  new Promise((resolve) => {
-    chrome.storage.local.get("apiKey", (result) => resolve(result.apiKey || null));
-  });
-
 const decodeError = async (errorText: string) => {
   const apiKey = await getApiKey();
   if (!apiKey) {
-    showResult(`<p style="color: var(--error-red);">API key not set. Go to extension options and paste your key.</p>`);
+    showResult(`<p class="error-msg">API key not set. Go to extension options and paste your key.</p>`);
     return;
   }
 
@@ -112,25 +104,14 @@ const decodeError = async (errorText: string) => {
   resultLoading.style.display = "block";
 
   try {
-    const apiBase = typeof __API_BASE__ !== "undefined" ? __API_BASE__ : "http://localhost:4001/api";
+    const response = await api.decode({ errorText });
 
-    const response = await fetch(`${apiBase}/decode`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({ errorText }),
-    });
-
-    const json = await response.json();
-
-    if (json.error) {
-      showResult(`<p style="color: var(--error-red);">${escapeHtml(json.error.message)}</p>`);
+    if ("error" in response) {
+      showResult(`<p class="error-msg">${escapeHtml(response.error.message)}</p>`);
       return;
     }
 
-    const data = json.data;
+    const data = response.data;
     let html = "";
 
     html += `<h3>What Happened</h3><p>${escapeHtml(data.whatHappened)}</p>`;
@@ -143,7 +124,7 @@ const decodeError = async (errorText: string) => {
       html += `<h3>How to Fix</h3><ol>${data.howToFix.map((f: string) => `<li>${escapeHtml(f)}</li>`).join("")}</ol>`;
     }
 
-    if (data.codeExample) {
+    if (data.codeExample?.after) {
       html += `<h3>Code Example</h3>`;
       if (data.codeExample.before) {
         html += `<div class="code-block"><pre><code>${escapeHtml(data.codeExample.before)}</code></pre></div>`;
@@ -153,15 +134,12 @@ const decodeError = async (errorText: string) => {
 
     showResult(html);
 
-    document.getElementById("copy-result-code")?.addEventListener("click", async () => {
-      const code = document.getElementById("code-copy-target")?.textContent ?? "";
-      await navigator.clipboard.writeText(code);
+    document.getElementById("copy-result-code")?.addEventListener("click", () => {
       const btn = document.getElementById("copy-result-code")!;
-      btn.textContent = "Copied!";
-      setTimeout(() => { btn.textContent = "Copy"; }, 2000);
+      copyToClipboard(btn, () => document.getElementById("code-copy-target")?.textContent ?? "");
     });
   } catch {
-    showResult(`<p style="color: var(--error-red);">Failed to connect to API. Is the server running?</p>`);
+    showResult(`<p class="error-msg">Failed to connect to API. Is the server running?</p>`);
   }
 };
 
