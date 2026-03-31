@@ -40,7 +40,7 @@ chrome.webRequest.onCompleted.addListener(
         level: "error",
         timestamp: details.timeStamp,
         url: details.url,
-        domain: new URL(details.url).hostname,
+        domain: (() => { try { return new URL(details.url).hostname; } catch { return ""; } })(),
         source: "network",
         tabId: details.tabId,
       });
@@ -116,7 +116,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // Error storage — per-tab
 // ============================================
 
-const appendCapturedError = async (error: {
+type CapturedError = {
   text: string;
   level: string;
   timestamp: number;
@@ -124,22 +124,46 @@ const appendCapturedError = async (error: {
   domain?: string;
   source?: string;
   tabId: number;
-}) => {
-  const key = `errors_tab_${error.tabId}`;
-  const result = await chrome.storage.session.get(key);
-  const errors = result[key] || [];
+};
 
-  // Dedupe
+const errorBuffers = new Map<number, CapturedError[]>();
+const flushTimers = new Map<number, ReturnType<typeof setTimeout>>();
+
+const flushToStorage = (tabId: number) => {
+  const errors = errorBuffers.get(tabId);
+  if (!errors) return;
+  chrome.storage.session.set({ [`errors_tab_${tabId}`]: errors });
+  flushTimers.delete(tabId);
+};
+
+const scheduleFlush = (tabId: number) => {
+  if (flushTimers.has(tabId)) clearTimeout(flushTimers.get(tabId)!);
+  // Debounce: flush to storage 100ms after last write
+  flushTimers.set(tabId, setTimeout(() => flushToStorage(tabId), 100));
+};
+
+const appendCapturedError = (error: CapturedError) => {
+  const { tabId } = error;
+  if (!errorBuffers.has(tabId)) errorBuffers.set(tabId, []);
+  const errors = errorBuffers.get(tabId)!;
+
   const last = errors[errors.length - 1];
+  // Dedup window: suppress identical errors within 500ms
   if (last && last.text === error.text && error.timestamp - last.timestamp < 500) return;
 
   errors.push(error);
+  // Cap at 50 errors per tab to bound storage usage
   if (errors.length > 50) errors.shift();
 
-  await chrome.storage.session.set({ [key]: errors });
+  scheduleFlush(tabId);
 };
 
 // Clean up when tab is closed
 chrome.tabs.onRemoved.addListener((tabId) => {
+  if (flushTimers.has(tabId)) {
+    clearTimeout(flushTimers.get(tabId)!);
+    flushTimers.delete(tabId);
+  }
+  errorBuffers.delete(tabId);
   chrome.storage.session.remove(`errors_tab_${tabId}`);
 });
