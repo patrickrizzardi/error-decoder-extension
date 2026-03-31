@@ -112,7 +112,7 @@ const decodeError = async (errorText: string) => {
   resultLoading.style.display = "block";
 
   try {
-    const apiBase = typeof __API_BASE__ !== "undefined" ? __API_BASE__ : "http://localhost:5000/api";
+    const apiBase = typeof __API_BASE__ !== "undefined" ? __API_BASE__ : "http://localhost:4001/api";
 
     const response = await fetch(`${apiBase}/decode`, {
       method: "POST",

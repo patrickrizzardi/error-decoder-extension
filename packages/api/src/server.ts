@@ -1,6 +1,6 @@
 import app from "./index";
 
-const port = parseInt(process.env.APP_URL?.split(":").pop() ?? "5000", 10);
+const port = parseInt(process.env.APP_URL?.split(":").pop() ?? "4001", 10);
 
 console.log(`ErrorDecoder API running on port ${port}`);
 

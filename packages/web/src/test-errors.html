@@ -166,7 +166,7 @@
       try {
         // This hits our API health endpoint but we'll make it a bad URL to get 404
         // simulating an API that's returning errors
-        const response = await fetch('http://localhost:5000/api/nonexistent-endpoint');
+        const response = await fetch('http://localhost:4001/api/nonexistent-endpoint');
 
         // Try to use the response as if it were valid JSON data
         const data = await response.json();
@@ -211,7 +211,7 @@
       console.warn('[Auth] Access token may be expired, attempting request...');
 
       try {
-        const response = await fetch('http://localhost:5000/api/usage', {
+        const response = await fetch('http://localhost:4001/api/usage', {
           headers: { 'Authorization': 'Bearer expired_token_abc123' }
         });
 
@@ -219,7 +219,7 @@
           console.warn('[Auth] Got 401 — token expired. Attempting refresh...');
 
           // Try to refresh token — also fails
-          const refreshResponse = await fetch('http://localhost:5000/api/auth/key', {
+          const refreshResponse = await fetch('http://localhost:4001/api/auth/key', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

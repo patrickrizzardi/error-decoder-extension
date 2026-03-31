@@ -42,7 +42,7 @@ for (const { entry, outfile } of entrypoints) {
     define: {
       "process.env.NODE_ENV": '"production"',
       __API_BASE__: JSON.stringify(
-        process.env.API_BASE ?? "http://localhost:5000/api"
+        process.env.API_BASE ?? "http://localhost:4001/api"
       ),
     },
   });

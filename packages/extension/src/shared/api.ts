@@ -12,7 +12,7 @@ import { storage } from "./storage";
 const API_BASE =
   typeof __API_BASE__ !== "undefined"
     ? __API_BASE__
-    : "http://localhost:5000/api";
+    : "http://localhost:4001/api";
 
 const getHeaders = async (): Promise<HeadersInit> => {
   const apiKey = await storage.get("apiKey");
