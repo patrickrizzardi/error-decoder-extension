@@ -70,39 +70,39 @@ Build an always-on AI debugging sidebar Chrome extension. Real-time error stream
 - [ ] 4.5 Pin extension ID in manifest.json for dev (needed for web → extension messaging)
 - [ ] 4.6 Test full flow end-to-end: sidebar → sign up → auth page → extension gets API key → decode works
 
-### Phase 7: Usage Tracking UI
-- [x] 7.3 Upgrade CTA when limit hit — DONE (single button → homepage pricing)
-- [ ] 7.1 Free tier limit enforced in sidebar UI (3/day) — API enforces, sidebar just shows error
-- [ ] 7.2 Remaining count visible in sidebar
-- [ ] 7.4 Sonnet monthly limit display
+### Phase 7: Usage Tracking UI ✅
+- [x] 7.1 Free tier limit enforced in sidebar UI — API returns 429, sidebar shows upgrade CTA
+- [x] 7.2 Remaining count visible in sidebar — "X of 3 free decodes used today" shown for free users
+- [x] 7.3 Upgrade CTA when limit hit — single button → homepage pricing
+- [x] 7.4 Sonnet monthly limit display — "(X left)" shown on Sonnet button for Pro users
 
-### Phase 10: Landing Page
-- [x] 10.1 Full landing page (hero, how it works, pricing, FAQ) — DONE
-- [x] 10.2 SEO meta tags, OG tags, structured data — DONE
-- [ ] 10.3 Privacy policy + terms of service pages — basic versions exist at /privacy and /terms
-- [ ] 10.4 Blog section ready for content marketing
+### Phase 10: Landing Page ✅
+- [x] 10.1 Full landing page (hero, how it works, pricing, FAQ)
+- [x] 10.2 SEO meta tags, OG tags, structured data
+- [x] 10.3 Privacy policy + terms of service pages — fully written, routed, linked from footer
+- [ ] 10.4 Blog section ready for content marketing — POST-LAUNCH (not a blocker)
 
-### Phase 11: Testing & QA
+### Phase 11: Testing & QA (Patrick — manual)
 - [ ] 11.1 Test on 15+ real error types across sites
 - [ ] 11.2 Full user journey (signup → decode → limit → upgrade → unlimited)
 - [ ] 11.3 Edge cases (offline, restricted pages, long errors, etc.)
 
 ### Phase 12: Chrome Web Store Prep
-- [ ] 12.1 Final icons (128, 48, 16) — placeholders exist
-- [ ] 12.2 Screenshots (1280x800 x3)
-- [ ] 12.3 Store listing copy (keyword optimized)
-- [ ] 12.4 Permission justifications
-- [ ] 12.5 Privacy policy hosted on errordecoder.dev
+- [ ] 12.1 Final icons (128, 48, 16) — placeholders exist (Patrick — design)
+- [ ] 12.2 Screenshots (1280x800 x3) — (Patrick — browser)
+- [x] 12.3 Store listing copy — DONE (saved in .claude/plans/cws-listing.md)
+- [x] 12.4 Permission justifications — DONE (saved in .claude/plans/cws-listing.md)
+- [x] 12.5 Privacy policy hosted on errordecoder.dev — DONE (already at /privacy)
 
-### Phase 13: Verification Sweep
-- [ ] 13.1 TODO/FIXME grep
-- [ ] 13.2 Security scan (no secrets in code)
-- [ ] 13.3 Quality checklist pass
+### Phase 13: Verification Sweep ✅
+- [x] 13.1 TODO/FIXME grep — clean, zero code TODOs
+- [x] 13.2 Security scan — clean, no secrets in code (test password in seed script is fine)
+- [x] 13.3 Quality checklist — code audit done, DRY pass done, all findings addressed
 - [x] 13.4 Code audit findings addressed
 
-### Stripe Dashboard Config (manual, not code)
-- [ ] Set retry schedule: 3 retries, 1/day, then cancel subscription
-- [ ] Enable PayPal + CashApp payment methods (if not already)
+### Stripe Dashboard Config (manual — Patrick)
+- [x] Set retry schedule: 4 retries in 1 week, then cancel subscription — DONE
+- [ ] Enable PayPal + CashApp payment methods in Stripe Dashboard
 
 ---
 
