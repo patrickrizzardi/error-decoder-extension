@@ -1,6 +1,6 @@
 # Session State: Error Decoder
 
-**Last Updated**: 2026-03-30
+**Last Updated**: 2026-03-31
 
 ---
 
@@ -22,7 +22,13 @@
 
 **PRODUCT PIVOT (2026-03-28)**: Original "error decoder" concept killed. Chrome's built-in DevTools AI (Gemini) does error explanation for free with deeper page access. New product is a DEBUGGING DASHBOARD SIDEBAR that lives on the page — NOT inside DevTools. Streams errors in real-time, monitors network requests, inspects elements, detects tech stack, resolves source maps, batch-decodes with AI.
 
-**Immediate Task**: Waiting on code audit results from separate agent. Core extension features complete. Remaining: auth flow, usage tracking UI, landing page, CWS prep.
+**Immediate Task**: Fixing auth/logout flow. User couldn't log out — Supabase sessions persisted due to autoRefreshToken race condition. Fixed in this session.
+
+**Just Completed (2026-03-31)**:
+- Fixed logout race condition in auth.html: logout now runs BEFORE Supabase client creation, uses throwaway client with autoRefreshToken:false, calls signOut({scope:"global"})
+- Added "Log Out" button to auth.html success state
+- Auth page logout now sends LOGOUT message to extension (background.ts handles it, clears storage)
+- Extension build verified clean
 
 **What's Working (ALL CORE FEATURES COMPLETE)**:
 - Sidebar: injected iframe, pushes page, resizable width (drag handle), dark/light mode
@@ -40,14 +46,12 @@
 - Custom scrollbars, resize grips (textarea + sidebar)
 
 **What's Left**:
-- Phase 4: Auth flow (signup/login from extension)
+- Phase 4: Auth flow testing (logout fixed, need to test full signup→checkout flow)
 - Phase 7: Usage tracking UI (free tier limits in sidebar)
-- Phase 9: Code cleanup / DRY pass
 - Phase 10: Landing page
 - Phase 11: Testing & QA
 - Phase 12: Chrome Web Store prep
 - Phase 13: Verification sweep
-- Code audit findings (separate agent working on this)
 
 ---
 
@@ -100,6 +104,7 @@ curl localhost:4001/api/health       # Test API
 - [2026-03-30] **Haiku default, Sonnet explicit choice**: User picks model. No auto-switching based on complexity. Pro users see both buttons.
 - [2026-03-30] **API port 4001**: Changed from 5000 to avoid conflict with VPM.
 - [2026-03-30] **Per-tab errors**: Each tab has its own error feed. Cleaned up on tab close.
+- [2026-03-31] **Logout fix: pre-client signOut**: Logout runs before Supabase client init to avoid autoRefreshToken race. Uses scope:"global" to revoke all sessions.
 
 ---
 
@@ -113,6 +118,7 @@ curl localhost:4001/api/health       # Test API
 - Custom Dockerfile — removed
 - Popup (paste mode) — removed, sidebar is the product
 - Fixed Docker subnet — removed, using default bridge
+- Old logout flow (signOut after client init) — replaced with pre-client signOut to fix race condition
 
 ---
 
@@ -131,5 +137,4 @@ curl localhost:4001/api/health       # Test API
 - Supabase key naming: SUPABASE_PUBLISHABLE_KEY, SUPABASE_SECRET_KEY
 - Git commits need Patrick's approval (permission blocked for Claude)
 - Code needs DRY cleanup pass — sidepanel/index.ts is large, panel.ts has inline styles
-- Separate agent running code audit — wait for findings before cleanup
-- VPM test error in dashboard.view.vue needs to be reverted (Patrick added it back)
+- Auth page logout now sends LOGOUT message to extension via chrome.runtime.sendMessage

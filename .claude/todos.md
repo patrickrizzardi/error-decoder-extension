@@ -45,40 +45,41 @@ Build an always-on AI debugging sidebar Chrome extension. Real-time error stream
 - [x] CORS, auth middleware, rate limiting
 
 ## Code Audit ✅ COMPLETE (2026-03-30)
-- [x] A.1 Ran 8 analyzers (bugs, perf, cleanup, redundancy, consistency, consolidation, docs, UX)
-- [x] A.2 Verified all findings manually — confirmed 30+, rejected 4 false positives
-- [x] A.3 Fixed critical bugs: appendCapturedError race condition, inspect session killer, escapeHtml crash, message listener return true, unbounded buffer
-- [x] A.4 DRY consolidation: shared/html.ts, shared/ui.ts, updated storage.ts + api.ts + types.ts, eliminated 5 duplicate definitions
-- [x] A.5 Performance: rAF gating, VLQ lookup table + memoization, Range headers for source maps, CSS rule cap at 500, SPA cache invalidation, parallel builds
-- [x] A.6 Cleanup: removed decodeBatch, basicMarkdownToHtml, togglePanel, orphaned HTML elements
-- [x] A.7 Docs: VLQ algorithm, content script realm architecture, magic constants
-- [x] A.8 UX: focus-visible CSS (WCAG), better empty state text
+- [x] A.1–A.8 all done (bugs, perf, cleanup, redundancy, consistency, consolidation, docs, UX)
+
+## Auth & Payment Flow ✅ COMPLETE (2026-03-31)
+- [x] Logout race condition fixed (signOut before client init, autoRefreshToken:false, scope:"global")
+- [x] "Log Out" button on auth.html success state + auth page logout button
+- [x] Background script handles LOGOUT + PLAN_UPGRADED messages
+- [x] Sidebar reloads on logout (apiKey removal detected via storage listener)
+- [x] Sidebar updates live on plan upgrade (userPlan storage listener → loadUserPlan)
+- [x] Checkout success page messages extension with PLAN_UPGRADED
+- [x] Smooth checkout flow: spinner loading state instead of API key flash
+- [x] Single "Upgrade to Pro" button in sidebar → opens homepage/#pricing
+- [x] Payment methods: card, Link, PayPal, CashApp (no bank/wire)
+- [x] Failed payment handling: immediate downgrade on invoice.payment_failed, re-upgrade on successful retry
+- [x] Manual API key paste (options page fallback)
 
 ## Remaining Phases
 
-### Phase 4: Auth Flow (MVP — email/password only)
+### Phase 4: Auth Flow — remaining items
+- [x] 4.2 Wire auth.html placeholders via web server — ALREADY WORKING
+- [x] 4.3 Sign Up button in sidebar decode tab — ALREADY WORKING (auth-prompt CTA)
+- [x] 4.4 chrome.runtime.onMessageExternal listener — ALREADY WORKING
 - [ ] 4.1 Supabase Auth config (enable email provider, disable email confirmation for instant signup)
-- [ ] 4.2 Wire auth.html placeholders (%%SUPABASE_URL%%, %%SUPABASE_PUBLISHABLE_KEY%%, %%API_BASE%%) via web server
-- [ ] 4.3 Add "Sign Up" button in sidebar decode tab (shows when no API key, opens errordecoder.dev/auth in new tab)
-- [ ] 4.4 Add chrome.runtime.onMessageExternal listener in background (receives AUTH_SUCCESS from web page)
 - [ ] 4.5 Pin extension ID in manifest.json for dev (needed for web → extension messaging)
-- [ ] 4.6 Test full flow: sidebar → sign up → auth page → extension gets API key → decode works
-- [x] 4.7 Manual API key paste — working (options page, fallback)
+- [ ] 4.6 Test full flow end-to-end: sidebar → sign up → auth page → extension gets API key → decode works
 
 ### Phase 7: Usage Tracking UI
-- [ ] 7.1 Free tier limit enforced in sidebar UI (3/day)
+- [x] 7.3 Upgrade CTA when limit hit — DONE (single button → homepage pricing)
+- [ ] 7.1 Free tier limit enforced in sidebar UI (3/day) — API enforces, sidebar just shows error
 - [ ] 7.2 Remaining count visible in sidebar
-- [ ] 7.3 Upgrade CTA when limit hit
 - [ ] 7.4 Sonnet monthly limit display
 
-### Phase 9: UI Polish
-- [x] 9.1 Code cleanup / DRY pass — done via audit
-- [x] 9.2 Final visual polish based on audit findings — done via audit
-
 ### Phase 10: Landing Page
-- [ ] 10.1 Full landing page (hero, how it works, pricing, FAQ)
-- [ ] 10.2 SEO meta tags, OG tags, structured data — basic version exists
-- [ ] 10.3 Privacy policy + terms of service pages
+- [x] 10.1 Full landing page (hero, how it works, pricing, FAQ) — DONE
+- [x] 10.2 SEO meta tags, OG tags, structured data — DONE
+- [ ] 10.3 Privacy policy + terms of service pages — basic versions exist at /privacy and /terms
 - [ ] 10.4 Blog section ready for content marketing
 
 ### Phase 11: Testing & QA
@@ -99,6 +100,10 @@ Build an always-on AI debugging sidebar Chrome extension. Real-time error stream
 - [ ] 13.3 Quality checklist pass
 - [x] 13.4 Code audit findings addressed
 
+### Stripe Dashboard Config (manual, not code)
+- [ ] Set retry schedule: 3 retries, 1/day, then cancel subscription
+- [ ] Enable PayPal + CashApp payment methods (if not already)
+
 ---
 
 ## MVP2 — Post-Launch Priority (ship these within first week)
@@ -110,7 +115,6 @@ Build an always-on AI debugging sidebar Chrome extension. Real-time error stream
 - [ ] Add Google OAuth redirect URL to Supabase
 - [ ] Update auth.html Google button to use real Supabase OAuth flow
 - [ ] Test full Google OAuth flow: extension → auth page → Google consent → back to extension
-- **Why first**: 20-35% more signups. Devs are already logged into Google in Chrome — it's one click.
 
 ### M2.2 Usage Limit UI in Sidebar
 - [ ] Show "2 of 3 free decodes remaining" after each decode
@@ -118,7 +122,7 @@ Build an always-on AI debugging sidebar Chrome extension. Real-time error stream
 - [ ] Sonnet remaining count for Pro users
 
 ### M2.3 Stripe Upgrade Flow from Extension
-- [ ] "Upgrade" button in sidebar → opens checkout page → re-checks plan after return
+- [x] "Upgrade" button in sidebar → opens pricing page — DONE
 
 ---
 
@@ -130,4 +134,3 @@ Build an always-on AI debugging sidebar Chrome extension. Real-time error stream
 - AI gets real source code context → responses reference THEIR code specifically
 - Huge differentiator — no competing tool does this
 - Could justify a "Super Pro" tier ($29/mo?) or be a Pro-only feature
-- Needs: GitHub OAuth, GitHub API search, repo indexing strategy, token/scope management
