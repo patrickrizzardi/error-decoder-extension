@@ -7,7 +7,7 @@
   <meta name="description" content="AI-powered Chrome extension that catches errors in real-time, explains what went wrong, and shows you the fix. Right on the page. Free tier available.">
 
   <link rel="canonical" href="https://errordecoder.dev">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="/styles.css">
 
   <!-- Open Graph -->
   <meta property="og:title" content="ErrorDecoder — AI Error Decoder Chrome Extension">
@@ -428,7 +428,7 @@
             <li>Full decode history</li>
             <li>20 Deep Analysis / month</li>
           </ul>
-          <a href="#" class="btn-pricing sonnet" aria-label="Start your ErrorDecoder Pro trial">Start Free, Upgrade Anytime</a>
+          <a href="/auth?checkout=month" class="btn-pricing sonnet" id="pro-cta" aria-label="Start your ErrorDecoder Pro trial">Start Free, Upgrade Anytime</a>
         </div>
       </div>
     </section>
@@ -522,5 +522,19 @@
     </div>
   </footer>
 
+  <script>
+    // Update Pro CTA link based on billing toggle
+    const proCta = document.getElementById("pro-cta");
+    const yearlyToggle = document.getElementById("toggle-yearly");
+    const monthlyToggle = document.getElementById("toggle-monthly");
+
+    const updateProLink = () => {
+      const interval = yearlyToggle.checked ? "year" : "month";
+      proCta.href = `/auth?checkout=${interval}`;
+    };
+
+    yearlyToggle.addEventListener("change", updateProLink);
+    monthlyToggle.addEventListener("change", updateProLink);
+  </script>
 </body>
 </html>

@@ -158,6 +158,39 @@
       color: var(--text-muted);
       margin-top: 12px;
     }
+    .btn-logout {
+      background: transparent;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      margin-top: 12px;
+    }
+    .btn-logout:hover {
+      color: var(--error);
+      border-color: var(--error);
+    }
+    /* Checkout loading state */
+    .checkout-loading {
+      text-align: center;
+      padding: 40px 0;
+    }
+    .checkout-loading h2 {
+      color: var(--accent);
+      margin-bottom: 12px;
+    }
+    .checkout-loading p {
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+    .spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      margin: 0 auto 16px;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
@@ -200,6 +233,13 @@
       <div id="message" class="message"></div>
     </div>
 
+    <!-- Checkout loading state (no flash, clean redirect) -->
+    <div id="checkout-loading" class="checkout-loading hidden">
+      <div class="spinner"></div>
+      <h2>Setting up checkout</h2>
+      <p>Redirecting to Stripe...</p>
+    </div>
+
     <!-- Success state (after auth) -->
     <div id="success-state" class="success-state hidden">
       <h2>You're in!</h2>
@@ -212,6 +252,7 @@
         The extension should pick this up automatically.<br>
         If not, paste it in the extension's options page.
       </p>
+      <button class="btn-logout" id="logout-btn">Log Out</button>
     </div>
   </div>
 
@@ -222,6 +263,31 @@
     const SUPABASE_KEY = "%%SUPABASE_PUBLISHABLE_KEY%%";
     const API_BASE = "%%API_BASE%%";
     const EXTENSION_ID = "%%EXTENSION_ID%%";
+
+    const urlParams = new URLSearchParams(window.location.search);
+
+    // Nuke all Supabase tokens from localStorage
+    const clearSupabaseStorage = () => {
+      Object.keys(localStorage).forEach((key) => {
+        if (key.startsWith("sb-")) localStorage.removeItem(key);
+      });
+    };
+
+    // Handle logout BEFORE creating the client — avoids autoRefreshToken race condition
+    if (urlParams.get("logout") === "true") {
+      // Clear tokens first so the client can't auto-refresh them
+      clearSupabaseStorage();
+      // Create a throwaway client with no auto-refresh just to call signOut
+      const logoutClient = createClient(SUPABASE_URL, SUPABASE_KEY, {
+        auth: { autoRefreshToken: false, persistSession: false },
+      });
+      await logoutClient.auth.signOut({ scope: "global" });
+      // Belt and suspenders — clear again in case signOut wrote something
+      clearSupabaseStorage();
+      window.location.replace("/auth");
+      // Stop execution — don't initialize anything else
+      throw new Error("logout-redirect");
+    }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -243,8 +309,22 @@
       });
     });
 
-    // After successful auth — get API key and show it
+    const checkoutInterval = urlParams.get("checkout");
+
+    // Show only one state at a time
+    const showState = (stateId) => {
+      ["auth-forms", "success-state", "checkout-loading"].forEach((id) => {
+        document.getElementById(id).classList.toggle("hidden", id !== stateId);
+      });
+    };
+
+    // After successful auth — get API key, send to extension, and handle checkout redirect
     const onAuthSuccess = async (session) => {
+      // If checkout intent, show clean loading immediately (no API key flash)
+      if (checkoutInterval === "month" || checkoutInterval === "year") {
+        showState("checkout-loading");
+      }
+
       try {
         const res = await fetch(`${API_BASE}/api/auth/key`, {
           method: "POST",
@@ -256,10 +336,6 @@
         const json = await res.json();
 
         if (json.data?.apiKey) {
-          document.getElementById("auth-forms").classList.add("hidden");
-          document.getElementById("success-state").classList.remove("hidden");
-          document.getElementById("api-key-text").textContent = json.data.apiKey;
-
           // Try to send to extension
           if (EXTENSION_ID && chrome?.runtime?.sendMessage) {
             try {
@@ -273,11 +349,54 @@
               // Extension not available — user can copy key manually
             }
           }
+
+          // If checkout intent, redirect straight to Stripe
+          if (checkoutInterval === "month" || checkoutInterval === "year") {
+            const checkoutRes = await fetch(`${API_BASE}/api/checkout`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${json.data.apiKey}`,
+              },
+              body: JSON.stringify({ interval: checkoutInterval }),
+            });
+            const checkoutJson = await checkoutRes.json();
+
+            if (checkoutJson.data?.url) {
+              window.location.href = checkoutJson.data.url;
+              return;
+            }
+            // Checkout failed — fall through to show API key
+          }
+
+          // No checkout intent (or checkout failed) — show API key
+          showState("success-state");
+          document.getElementById("api-key-text").textContent = json.data.apiKey;
         }
       } catch {
+        showState("auth-forms");
         showMessage("Failed to get API key. Try again.");
       }
     };
+
+    // Logout handler (from the button on the success state)
+    const handleLogout = async () => {
+      clearSupabaseStorage();
+      await supabase.auth.signOut({ scope: "global" });
+      clearSupabaseStorage();
+      // Also tell the extension to clear its state
+      if (EXTENSION_ID && chrome?.runtime?.sendMessage) {
+        try {
+          chrome.runtime.sendMessage(EXTENSION_ID, { type: "LOGOUT" });
+        } catch {
+          // Extension not available
+        }
+      }
+      // Reload to show login form
+      window.location.replace("/auth");
+    };
+
+    document.getElementById("logout-btn")?.addEventListener("click", handleLogout);
 
     // Google OAuth — MVP2
     // document.getElementById("google-btn").addEventListener("click", async () => {
@@ -323,7 +442,7 @@
       setTimeout(() => { document.getElementById("copy-key").textContent = "Copy"; }, 2000);
     });
 
-    // Check if returning from OAuth redirect
+    // Check for existing session (only runs if NOT logout flow)
     const { data: { session } } = await supabase.auth.getSession();
     if (session) await onAuthSuccess(session);
   </script>
