@@ -22,7 +22,7 @@ portalRoute.post("/", authMiddleware, async (c) => {
 
   const session = await stripe.billingPortal.sessions.create({
     customer: user.stripeCustomerId,
-    return_url: process.env.APP_URL!,
+    return_url: `${process.env.APP_URL}/settings-updated`,
   });
 
   return c.json({ data: { url: session.url } });

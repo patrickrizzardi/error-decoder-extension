@@ -21,7 +21,7 @@ stripeWebhookRoute.post("/", async (c) => {
 
   let event;
   try {
-    event = stripe.webhooks.constructEvent(rawBody, signature, STRIPE_WEBHOOK_SECRET);
+    event = await stripe.webhooks.constructEventAsync(rawBody, signature, STRIPE_WEBHOOK_SECRET);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error(`[Stripe Webhook] Signature verification failed: ${message}`);
@@ -107,8 +107,29 @@ stripeWebhookRoute.post("/", async (c) => {
 
     case "invoice.payment_failed": {
       const invoice = event.data.object;
-      console.log(`[Stripe Webhook] Payment failed for invoice ${invoice.id}. Stripe will retry.`);
-      // Stripe retries 3 times over ~3 weeks. No immediate action needed.
+      const customerId = typeof invoice.customer === "string"
+        ? invoice.customer
+        : invoice.customer?.id;
+
+      const willRetry = invoice.next_payment_attempt !== null;
+
+      if (customerId) {
+        // Immediately downgrade — if a retry succeeds later,
+        // customer.subscription.updated will re-upgrade to pro
+        await supabase
+          .from("users")
+          .update({
+            plan: "free",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("stripe_customer_id", customerId);
+      }
+
+      if (willRetry) {
+        console.log(`[Stripe Webhook] Payment failed for invoice ${invoice.id} (attempt ${invoice.attempt_count}). Downgraded, Stripe will retry.`);
+      } else {
+        console.log(`[Stripe Webhook] Payment failed for invoice ${invoice.id} — all retries exhausted. Account downgraded.`);
+      }
       break;
     }
 

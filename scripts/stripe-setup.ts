@@ -10,21 +10,13 @@
  * - Idempotent: run as many times as you want
  */
 
-import Stripe from "stripe";
-
-const stripeKey = process.env.STRIPE_SECRET_KEY;
-if (!stripeKey) {
-  console.error("STRIPE_SECRET_KEY not set in environment");
-  process.exit(1);
-}
+import { stripe } from "../packages/api/src/lib/stripe";
 
 // Safety check: warn if running against live mode
-if (stripeKey.startsWith("sk_live_")) {
+if (process.env.STRIPE_SECRET_KEY?.startsWith("sk_live_")) {
   console.warn("⚠️  WARNING: Running against LIVE Stripe. Press Ctrl+C to abort.");
   await Bun.sleep(5000);
 }
-
-const stripe = new Stripe(stripeKey, { apiVersion: "2025-12-18.acacia" });
 
 // ============================================
 // Desired State Config
@@ -34,6 +26,7 @@ const PRODUCT_CONFIG = {
   name: "ErrorDecoder Pro",
   description: "Unlimited error decoding + Claude Sonnet deep analysis",
   metadata: { app: "error-decoder" },
+  tax_code: "txcd_10103001", // SaaS - Business Use
 };
 
 const PRICE_CONFIGS = [
@@ -142,15 +135,20 @@ const syncPrices = async (productId: string) => {
 };
 
 const syncWebhooks = async () => {
-  const appUrl = process.env.APP_URL ?? "http://localhost:5000";
-  const webhookUrl = `${appUrl}/api/webhook/stripe`;
+  const apiUrl = process.env.API_URL ?? "http://localhost:4001";
+  const webhookUrl = `${apiUrl}/api/webhook/stripe`;
+
+  // Local dev uses Stripe CLI container for webhooks — skip registration
+  if (webhookUrl.includes("localhost") || webhookUrl.includes("127.0.0.1")) {
+    console.log(`✓ Webhook: skipping registration (localhost — use Stripe CLI container)`);
+    return;
+  }
 
   const existing = await stripe.webhookEndpoints.list({ limit: 100 });
   const match = existing.data.find((w) => w.url === webhookUrl);
 
   if (match) {
     console.log(`✓ Webhook exists: ${webhookUrl} (${match.id})`);
-    // Update events if changed
     await stripe.webhookEndpoints.update(match.id, {
       enabled_events: WEBHOOK_EVENTS,
     });

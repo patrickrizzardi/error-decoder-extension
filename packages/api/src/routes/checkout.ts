@@ -59,12 +59,15 @@ checkoutRoute.post("/", authMiddleware, async (c) => {
       .eq("id", user.id);
   }
 
-  // Create checkout session
+  // Create checkout session — cards only, automatic tax
   const session = await stripe.checkout.sessions.create({
     customer: customerId,
     client_reference_id: user.id,
     mode: "subscription",
+    payment_method_types: ["card", "link", "paypal", "cashapp"],
     line_items: [{ price: price.id, quantity: 1 }],
+    automatic_tax: { enabled: true },
+    customer_update: { address: "auto" },
     success_url: `${process.env.APP_URL}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${process.env.APP_URL}/#pricing`,
     subscription_data: {
