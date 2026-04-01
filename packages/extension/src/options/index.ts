@@ -19,6 +19,11 @@ const loadProfile = async () => {
   if (apiKey) {
     manualSection.style.display = "none";
   }
+
+  // Show manage subscription button for any signed-in user
+  // (lets downgraded users fix their payment method via Stripe portal)
+  const manageBtn = document.getElementById("manage-sub")!;
+  manageBtn.style.display = apiKey ? "inline-block" : "none";
 };
 
 // Save manually entered API key
@@ -44,8 +49,22 @@ document.getElementById("copy-key")?.addEventListener("click", async () => {
   }
 });
 
+document.getElementById("manage-sub")?.addEventListener("click", async () => {
+  const { api, SITE_URL } = await import("../shared/api");
+  const res = await api.portal();
+  if ("data" in res) {
+    chrome.tabs.create({ url: res.data.url });
+  } else {
+    // No Stripe customer yet — send them to pricing to subscribe
+    chrome.tabs.create({ url: `${SITE_URL}/#pricing` });
+  }
+});
+
 document.getElementById("logout")?.addEventListener("click", async () => {
   await storage.clear();
+  // Clear Supabase session in the browser too
+  const { AUTH_URL } = await import("../shared/api");
+  chrome.tabs.create({ url: `${AUTH_URL}?logout=true` });
   loadProfile();
 });
 

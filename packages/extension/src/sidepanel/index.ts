@@ -5,7 +5,7 @@ import { marked } from "marked";
 import { escapeHtml } from "../shared/html";
 import { copyToClipboard, setupResizableGrip } from "../shared/ui";
 import { getApiKey } from "../shared/storage";
-import { api, API_BASE, AUTH_URL } from "../shared/api";
+import { api, API_BASE, AUTH_URL, SITE_URL } from "../shared/api";
 import type { CapturedError } from "@shared/types";
 
 // Resizable textareas
@@ -98,12 +98,21 @@ chrome.storage.session.onChanged.addListener((changes) => {
   }
 });
 
-// React to auth — dismiss signup prompts when key arrives
+// React to auth/plan changes — update sidebar in real-time
 chrome.storage.local.onChanged.addListener((changes) => {
-  if (changes.apiKey?.newValue) {
-    document.querySelectorAll(".auth-prompt").forEach((el) => {
-      el.innerHTML = `<p style="color: var(--success);">Signed in! You can now decode errors.</p>`;
-    });
+  if (changes.apiKey) {
+    if (changes.apiKey.newValue) {
+      document.querySelectorAll(".auth-prompt").forEach((el) => {
+        el.innerHTML = `<p style="color: var(--success);">Signed in! You can now decode errors.</p>`;
+      });
+    } else {
+      // Logged out — full reload resets all UI to signed-out state
+      window.location.reload();
+      return;
+    }
+  }
+  if (changes.userPlan?.newValue || changes.planRefreshAt) {
+    loadUserPlan();
   }
 });
 
@@ -314,10 +323,11 @@ const updateUsageDisplay = (used: number, limit: number, plan: string) => {
     haikuRemaining.textContent = "(limit reached)";
     usageBar.classList.remove("hidden");
     usageBar.className = "usage-bar limit-hit";
-    usageBar.innerHTML = `<a href="#" id="upgrade-link" class="btn btn-upgrade">Upgrade to Pro — Unlimited Decodes</a>`;
-    usageBar.querySelector("#upgrade-link")?.addEventListener("click", (e) => {
+    usageBar.innerHTML = `
+      <a href="#" id="upgrade-cta" class="btn btn-upgrade">Upgrade to Pro</a>`;
+    usageBar.querySelector("#upgrade-cta")?.addEventListener("click", (e) => {
       e.preventDefault();
-      chrome.tabs.create({ url: AUTH_URL.replace("/auth", "/#pricing") });
+      chrome.tabs.create({ url: `${SITE_URL}/#pricing` });
     });
   } else {
     haikuBtn.disabled = false;
@@ -437,10 +447,14 @@ const decodeSingle = async (errorText: string, model: "haiku" | "sonnet") => {
         decodeResult.innerHTML = `
           <div class="auth-prompt">
             <p>${escapeHtml(json.error.message)}</p>
-            <button class="btn btn-sonnet auth-signup-btn">Upgrade to Pro</button>
+            <button class="btn btn-upgrade" id="upgrade-429-monthly">Upgrade to Pro — $9/mo</button>
+            <button class="btn btn-upgrade btn-upgrade-alt" id="upgrade-429-yearly">Or $79/year (save 27%)</button>
           </div>`;
-        decodeResult.querySelector(".auth-signup-btn")?.addEventListener("click", () => {
-          chrome.tabs.create({ url: json.upgradeUrl });
+        decodeResult.querySelector("#upgrade-429-monthly")?.addEventListener("click", () => {
+          chrome.tabs.create({ url: `${AUTH_URL}?checkout=month` });
+        });
+        decodeResult.querySelector("#upgrade-429-yearly")?.addEventListener("click", () => {
+          chrome.tabs.create({ url: `${AUTH_URL}?checkout=year` });
         });
       } else {
         decodeResult.innerHTML = `<p class="error-msg">${escapeHtml(json.error.message)}</p>`;

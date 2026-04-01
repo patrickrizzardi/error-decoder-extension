@@ -22,6 +22,9 @@ export const AUTH_URL =
     ? __AUTH_URL__
     : "http://localhost:4000/auth";
 
+// Derive site root from auth URL (e.g. "http://localhost:4000/auth" → "http://localhost:4000")
+export const SITE_URL = AUTH_URL.replace(/\/auth$/, "");
+
 const getHeaders = async (): Promise<HeadersInit> => {
   const apiKey = await storage.get("apiKey");
   const headers: HeadersInit = { "Content-Type": "application/json" };

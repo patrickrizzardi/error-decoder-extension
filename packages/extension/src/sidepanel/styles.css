@@ -113,13 +113,13 @@ body {
 
 .btn-upgrade {
   display: block;
-  background: var(--sonnet);
+  background: var(--accent);
   color: white;
   padding: 8px 12px;
   font-size: 12px;
   margin-top: 4px;
 }
-.btn-upgrade:hover { opacity: 0.9; }
+.btn-upgrade:hover { background: var(--accent-hover); }
 
 .icon-btn {
   background: none;

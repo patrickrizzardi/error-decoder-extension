@@ -121,6 +121,17 @@ chrome.runtime.onMessageExternal.addListener((message, _sender, sendResponse) =>
       userPlan: message.plan,
     });
     sendResponse({ received: true });
+  } else if (message.type === "PLAN_UPGRADED") {
+    chrome.storage.local.set({ userPlan: message.plan });
+    sendResponse({ received: true });
+  } else if (message.type === "PLAN_CHANGED") {
+    // Portal return — plan may have changed, trigger sidebar refresh
+    // Set a timestamp to force a storage change event
+    chrome.storage.local.set({ planRefreshAt: Date.now() });
+    sendResponse({ received: true });
+  } else if (message.type === "LOGOUT") {
+    chrome.storage.local.remove(["apiKey", "userEmail", "userPlan"]);
+    sendResponse({ received: true });
   }
   return true;
 });
