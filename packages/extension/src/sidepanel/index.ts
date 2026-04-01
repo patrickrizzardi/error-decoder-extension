@@ -318,10 +318,10 @@ const updateUsageDisplay = (used: number, limit: number, plan: string) => {
   }
   const remaining = Math.max(0, limit - used);
   haikuRemaining.textContent = `(${remaining} left)`;
+  usageBar.classList.remove("hidden");
   if (remaining === 0) {
     haikuBtn.disabled = true;
     haikuRemaining.textContent = "(limit reached)";
-    usageBar.classList.remove("hidden");
     usageBar.className = "usage-bar limit-hit";
     usageBar.innerHTML = `
       <a href="#" id="upgrade-cta" class="btn btn-upgrade">Upgrade to Pro</a>`;
@@ -331,7 +331,8 @@ const updateUsageDisplay = (used: number, limit: number, plan: string) => {
     });
   } else {
     haikuBtn.disabled = false;
-    usageBar.classList.add("hidden");
+    usageBar.className = "usage-bar";
+    usageBar.textContent = `${used} of ${limit} free decodes used today`;
   }
 };
 
@@ -447,14 +448,11 @@ const decodeSingle = async (errorText: string, model: "haiku" | "sonnet") => {
         decodeResult.innerHTML = `
           <div class="auth-prompt">
             <p>${escapeHtml(json.error.message)}</p>
-            <button class="btn btn-upgrade" id="upgrade-429-monthly">Upgrade to Pro — $9/mo</button>
-            <button class="btn btn-upgrade btn-upgrade-alt" id="upgrade-429-yearly">Or $79/year (save 27%)</button>
+            <a href="#" class="btn btn-upgrade" id="upgrade-429">Upgrade to Pro</a>
           </div>`;
-        decodeResult.querySelector("#upgrade-429-monthly")?.addEventListener("click", () => {
-          chrome.tabs.create({ url: `${AUTH_URL}?checkout=month` });
-        });
-        decodeResult.querySelector("#upgrade-429-yearly")?.addEventListener("click", () => {
-          chrome.tabs.create({ url: `${AUTH_URL}?checkout=year` });
+        decodeResult.querySelector("#upgrade-429")?.addEventListener("click", (e) => {
+          e.preventDefault();
+          chrome.tabs.create({ url: `${SITE_URL}/#pricing` });
         });
       } else {
         decodeResult.innerHTML = `<p class="error-msg">${escapeHtml(json.error.message)}</p>`;
