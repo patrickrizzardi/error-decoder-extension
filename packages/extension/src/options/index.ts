@@ -113,7 +113,18 @@ document.getElementById("delete-account")?.addEventListener("click", async () =>
   if (!confirmed) return;
 
   const { api, AUTH_URL } = await import("../shared/api");
-  await api.deleteAccount();
+  const result = await api.deleteAccount();
+
+  if ("error" in result) {
+    // Show error — don't clear storage on failure
+    await showConfirmModal({
+      title: "Deletion Failed",
+      message: "Could not delete your account. Please try again or contact support.",
+      confirmText: "OK",
+    });
+    return;
+  }
+
   await storage.clear();
   chrome.tabs.create({ url: `${AUTH_URL}?logout=true` });
   loadProfile();

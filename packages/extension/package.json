@@ -7,9 +7,12 @@
     "build": "bun run build.ts",
     "test": "bun test"
   },
-  "dependencies": {},
+  "dependencies": {
+    "dompurify": "^3.3.3"
+  },
   "devDependencies": {
     "@types/chrome": "latest",
+    "@types/dompurify": "^3.2.0",
     "typescript": "latest"
   }
 }
