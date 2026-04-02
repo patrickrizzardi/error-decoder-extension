@@ -101,7 +101,13 @@ export const showConfirmModal = (options: ConfirmModalOptions): Promise<boolean>
       color: "white",
     });
 
+    // ESC to cancel — declared before cleanup so cleanup can reference it
+    const onKeydown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") cleanup(false);
+    };
+
     const cleanup = (result: boolean) => {
+      document.removeEventListener("keydown", onKeydown);
       overlay.remove();
       style.remove();
       resolve(result);
@@ -113,13 +119,6 @@ export const showConfirmModal = (options: ConfirmModalOptions): Promise<boolean>
       if (e.target === overlay) cleanup(false);
     });
 
-    // ESC to cancel
-    const onKeydown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        document.removeEventListener("keydown", onKeydown);
-        cleanup(false);
-      }
-    };
     document.addEventListener("keydown", onKeydown);
 
     // Animations

@@ -8,6 +8,21 @@ export const setupResizableGrip = (
   let startY = 0;
   let startHeight = 0;
 
+  const onMouseMove = (e: MouseEvent) => {
+    if (!isDragging) return;
+    const delta = e.clientY - startY;
+    element.style.height = `${Math.max(minHeight, startHeight + delta)}px`;
+  };
+
+  const onMouseUp = () => {
+    if (!isDragging) return;
+    isDragging = false;
+    document.removeEventListener("mousemove", onMouseMove);
+    document.removeEventListener("mouseup", onMouseUp);
+    const pill = grip.querySelector(".textarea-grip-pill") as HTMLElement;
+    if (pill) pill.style.background = "";
+  };
+
   grip.addEventListener("mousedown", (e) => {
     isDragging = true;
     startY = e.clientY;
@@ -16,19 +31,9 @@ export const setupResizableGrip = (
 
     const pill = grip.querySelector(".textarea-grip-pill") as HTMLElement;
     if (pill) pill.style.background = "rgba(86, 156, 214, 0.8)";
-  });
 
-  document.addEventListener("mousemove", (e) => {
-    if (!isDragging) return;
-    const delta = e.clientY - startY;
-    element.style.height = `${Math.max(minHeight, startHeight + delta)}px`;
-  });
-
-  document.addEventListener("mouseup", () => {
-    if (!isDragging) return;
-    isDragging = false;
-    const pill = grip.querySelector(".textarea-grip-pill") as HTMLElement;
-    if (pill) pill.style.background = "";
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
   });
 };
 

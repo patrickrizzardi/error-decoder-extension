@@ -28,14 +28,3 @@ export const storage = {
 export const getApiKey = (): Promise<string | null> =>
   storage.get("apiKey").then((key) => key || null);
 
-// Session storage — cleared when browser closes
-export const sessionStorage = {
-  get: async (key: string): Promise<string | undefined> => {
-    const result = await chrome.storage.session.get(key);
-    return result[key] as string | undefined;
-  },
-
-  set: async (key: string, value: string): Promise<void> => {
-    await chrome.storage.session.set({ [key]: value });
-  },
-};

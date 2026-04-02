@@ -63,5 +63,5 @@ export const checkSensitiveData = (text: string): SensitiveMatch[] => {
 
 export const formatSensitiveWarning = (matches: SensitiveMatch[]): string => {
   const list = matches.map((m) => `• ${m.type}: ${m.preview}`).join("\n");
-  return `Possible sensitive data detected:\n\n${list}\n\nThis text will be sent to our API and processed by AI. Consider removing secrets before decoding.`;
+  return `Sensitive data detected:\n\n${list}\n\nThis text will be sent to our API for AI processing. Remove secrets and credentials before sending.`;
 };
