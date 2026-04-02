@@ -7,6 +7,8 @@ import { copyToClipboard, setupResizableGrip } from "../shared/ui";
 import { getApiKey } from "../shared/storage";
 import { api, API_BASE, AUTH_URL, SITE_URL } from "../shared/api";
 import type { CapturedError } from "@shared/types";
+import { checkSensitiveData, formatSensitiveWarning } from "../shared/sensitive-check";
+import { showConfirmModal } from "../shared/modal";
 
 // Resizable textareas
 // Resizable elements
@@ -435,6 +437,19 @@ const decodeSingle = async (errorText: string, model: "haiku" | "sonnet") => {
     return;
   }
 
+  // Check for sensitive data before sending
+  const sensitiveMatches = checkSensitiveData(errorText);
+  if (sensitiveMatches.length > 0) {
+    const proceed = await showConfirmModal({
+      title: "Sensitive Data Detected",
+      message: formatSensitiveWarning(sensitiveMatches),
+      confirmText: "Send Anyway",
+      cancelText: "Go Back & Edit",
+      confirmDanger: true,
+    });
+    if (!proceed) return;
+  }
+
   setDecoding(true, "Resolving source maps...");
   decodeInput.classList.remove("has-results");
   decodeResult.innerHTML = "";
@@ -621,6 +636,23 @@ ${cssRulesText ? `\nCSS rules applying to this element (selector → file):\n${c
 
 HTML (truncated):
 ${selectedElement.outerHTML}${getTechContext()}`;
+
+  // Check for sensitive data in element content
+  const inspectSensitive = checkSensitiveData(prompt);
+  if (inspectSensitive.length > 0) {
+    const proceed = await showConfirmModal({
+      title: "Sensitive Data Detected",
+      message: formatSensitiveWarning(inspectSensitive),
+      confirmText: "Send Anyway",
+      cancelText: "Cancel",
+      confirmDanger: true,
+    });
+    if (!proceed) {
+      inspectAskBtn.disabled = false;
+      inspectAskBtn.textContent = "Ask";
+      return;
+    }
+  }
 
   const inspectResult = document.getElementById("inspect-result")!;
   inspectResult.innerHTML = `<div class="skeleton"></div><div class="skeleton short"></div>`;
