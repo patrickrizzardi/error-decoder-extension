@@ -68,7 +68,21 @@
     .loading-text { color: var(--accent); font-size: 12px; }
     .error-text { color: var(--error); font-size: 12px; }
   </style>
+  <!-- Tech stack markers for screenshot demo (invisible, triggers badge detection) -->
+  <script src="https://gtag/fake"></script>
+  <script src="https://sentry/fake"></script>
+  <script src="https://js.stripe.com/fake"></script>
+  <script src="https://intercom/fake"></script>
+  <script src="https://supabase/fake"></script>
+  <script src="https://hotjar/fake"></script>
+  <script src="https://vercel/fake"></script>
+  <script type="module" src="/@vite/fake"></script>
+  <script src="fake.tsx"></script>
 </head>
+<div id="__next" style="display:none"></div>
+<div data-reactroot style="display:none"></div>
+<div class="flex bg-gray-100 px-4 py-2" style="display:none"></div>
+<div class="MuiButton-root" style="display:none"></div>
 <body>
   <h1>Error Test Page</h1>
   <p class="subtitle">Trigger realistic errors to test ErrorDecoder's sidebar capture + AI decode.</p>
