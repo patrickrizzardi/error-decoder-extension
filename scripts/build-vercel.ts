@@ -120,6 +120,7 @@ writeFileSync(
   JSON.stringify(
     {
       version: 3,
+      cleanUrls: true,
       routes: [
         {
           src: "/api/(.*)",
