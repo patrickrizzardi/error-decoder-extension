@@ -105,6 +105,8 @@ chrome.storage.local.onChanged.addListener((changes) => {
       document.querySelectorAll(".auth-prompt").forEach((el) => {
         el.innerHTML = `<p style="color: var(--success);">Signed in! You can now decode errors.</p>`;
       });
+      // Refresh plan — enables Sonnet button, updates usage display
+      loadUserPlan();
     } else {
       // Logged out — full reload resets all UI to signed-out state
       window.location.reload();
@@ -313,6 +315,7 @@ const usageBar = document.getElementById("usage-bar")!;
 const updateUsageDisplay = (used: number, limit: number, plan: string) => {
   if (plan === "pro") {
     haikuRemaining.textContent = "";
+    haikuBtn.disabled = false;
     usageBar.classList.add("hidden");
     return;
   }
@@ -324,7 +327,7 @@ const updateUsageDisplay = (used: number, limit: number, plan: string) => {
     haikuRemaining.textContent = "(limit reached)";
     usageBar.className = "usage-bar limit-hit";
     usageBar.innerHTML = `
-      <a href="#" id="upgrade-cta" class="btn btn-upgrade">Upgrade to Pro</a>`;
+      <a href="#" id="upgrade-cta" class="btn btn-primary btn-upgrade">Upgrade to Pro</a>`;
     usageBar.querySelector("#upgrade-cta")?.addEventListener("click", (e) => {
       e.preventDefault();
       chrome.tabs.create({ url: `${SITE_URL}/#pricing` });
@@ -332,7 +335,11 @@ const updateUsageDisplay = (used: number, limit: number, plan: string) => {
   } else {
     haikuBtn.disabled = false;
     usageBar.className = "usage-bar";
-    usageBar.textContent = `${used} of ${limit} free decodes used today`;
+    usageBar.innerHTML = `${used} of ${limit} free decodes used today · <a href="#" id="upgrade-link">Upgrade</a>`;
+    usageBar.querySelector("#upgrade-link")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      chrome.tabs.create({ url: `${SITE_URL}/#pricing` });
+    });
   }
 };
 
@@ -363,10 +370,14 @@ const setDecoding = (loading: boolean, phase?: string) => {
   isDecoding = loading;
   haikuBtn.disabled = loading;
   sonnetBtn.disabled = loading;
+  // Update text without destroying the haiku-remaining span reference
+  const textNode = haikuBtn.firstChild;
   if (loading) {
-    haikuBtn.textContent = phase || "Decoding...";
+    haikuRemaining.classList.add("hidden");
+    if (textNode) textNode.textContent = phase || "Decoding...";
   } else {
-    haikuBtn.innerHTML = `Decode (Haiku) <span id="haiku-remaining">${haikuRemaining.textContent}</span>`;
+    haikuRemaining.classList.remove("hidden");
+    if (textNode) textNode.textContent = "Decode (Haiku) ";
   }
   decodeInput.readOnly = loading;
 };
@@ -444,11 +455,28 @@ const decodeSingle = async (errorText: string, model: "haiku" | "sonnet") => {
     const json = await response.json();
 
     if (json.error) {
+      if (response.status === 401) {
+        decodeResult.innerHTML = `
+          <div class="auth-prompt">
+            <p>Your API key is invalid or expired.</p>
+            <p class="auth-sub">Sign in again or paste a new key in Settings.</p>
+            <button class="btn btn-primary auth-signup-btn">Sign In</button>
+            <p class="auth-fallback"><a href="#" class="auth-settings-link">Open Settings</a></p>
+          </div>`;
+        decodeResult.querySelector(".auth-signup-btn")?.addEventListener("click", () => {
+          chrome.tabs.create({ url: AUTH_URL });
+        });
+        decodeResult.querySelector(".auth-settings-link")?.addEventListener("click", (e) => {
+          e.preventDefault();
+          chrome.runtime.openOptionsPage();
+        });
+        return;
+      }
       if (json.upgradeUrl) {
         decodeResult.innerHTML = `
           <div class="auth-prompt">
             <p>${escapeHtml(json.error.message)}</p>
-            <a href="#" class="btn btn-upgrade" id="upgrade-429">Upgrade to Pro</a>
+            <a href="#" class="btn btn-primary btn-upgrade" id="upgrade-429">Upgrade to Pro</a>
           </div>`;
         decodeResult.querySelector("#upgrade-429")?.addEventListener("click", (e) => {
           e.preventDefault();

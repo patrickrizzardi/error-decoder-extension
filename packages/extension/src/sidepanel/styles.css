@@ -113,13 +113,9 @@ body {
 
 .btn-upgrade {
   display: block;
-  background: var(--accent);
-  color: white;
-  padding: 8px 12px;
-  font-size: 12px;
+  width: 100%;
   margin-top: 4px;
 }
-.btn-upgrade:hover { background: var(--accent-hover); }
 
 .icon-btn {
   background: none;
@@ -359,6 +355,15 @@ body {
   text-align: center;
   padding: 4px 0;
   margin-top: 6px;
+}
+
+.usage-bar a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.usage-bar a:hover {
+  text-decoration: underline;
 }
 
 /* ============================================
