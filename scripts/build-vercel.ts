@@ -77,7 +77,7 @@ console.log("Building web...");
 const envReplacements: Record<string, string> = {
   "%%SUPABASE_URL%%": process.env.SUPABASE_URL ?? "",
   "%%SUPABASE_PUBLISHABLE_KEY%%": process.env.SUPABASE_PUBLISHABLE_KEY ?? "",
-  "%%API_BASE%%": process.env.APP_URL ?? "",
+  "%%API_BASE%%": process.env.APP_URL ? `${process.env.APP_URL}/api` : "",
   "%%EXTENSION_ID%%": process.env.EXTENSION_ID ?? "",
 };
 
