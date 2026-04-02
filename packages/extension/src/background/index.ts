@@ -182,6 +182,16 @@ const appendCapturedError = (error: CapturedError) => {
   scheduleFlush(tabId);
 };
 
+// Sync buffer when sidebar clears errors
+chrome.storage.session.onChanged.addListener((changes) => {
+  for (const [key, change] of Object.entries(changes)) {
+    if (key.startsWith("errors_tab_") && Array.isArray(change.newValue) && change.newValue.length === 0) {
+      const tabId = parseInt(key.replace("errors_tab_", ""), 10);
+      errorBuffers.set(tabId, []);
+    }
+  }
+});
+
 // Clean up when tab is closed
 chrome.tabs.onRemoved.addListener((tabId) => {
   if (flushTimers.has(tabId)) {
