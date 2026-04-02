@@ -1,5 +1,10 @@
 // Background service worker — routes messages, stores errors, monitors network
 
+import type { CapturedError } from "@shared/types";
+
+declare const __API_BASE__: string;
+const API_BASE = typeof __API_BASE__ !== "undefined" ? __API_BASE__ : "http://localhost:4001/api";
+
 // Register context menu on install
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
@@ -115,18 +120,31 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // External messages from web auth page
 chrome.runtime.onMessageExternal.addListener((message, _sender, sendResponse) => {
   if (message.type === "AUTH_SUCCESS") {
-    chrome.storage.local.set({
-      apiKey: message.apiKey,
-      userEmail: message.email,
-      userPlan: message.plan,
-    });
-    sendResponse({ received: true });
-  } else if (message.type === "PLAN_UPGRADED") {
-    chrome.storage.local.set({ userPlan: message.plan });
-    sendResponse({ received: true });
-  } else if (message.type === "PLAN_CHANGED") {
-    // Portal return — plan may have changed, trigger sidebar refresh
-    // Set a timestamp to force a storage change event
+    // Validate API key against backend before storing
+    fetch(`${API_BASE}/usage`, {
+      headers: { Authorization: `Bearer ${message.apiKey}` },
+    })
+      .then((res) => res.json())
+      .then((json: { data?: { email?: string; plan?: string } }) => {
+        if (json.data?.email) {
+          // Key is valid — use server-verified data, not client-claimed
+          chrome.storage.local.set({
+            apiKey: message.apiKey,
+            userEmail: json.data.email,
+            userPlan: json.data.plan,
+          });
+          sendResponse({ received: true });
+        } else {
+          sendResponse({ error: "Invalid API key" });
+        }
+      })
+      .catch(() => {
+        sendResponse({ error: "Validation failed" });
+      });
+    return true; // Keep message channel open for async response
+  } else if (message.type === "PLAN_UPGRADED" || message.type === "PLAN_CHANGED") {
+    // Plan changes: trigger a refresh instead of trusting client-provided plan
+    // The sidebar listens for planRefreshAt changes and re-fetches from server
     chrome.storage.local.set({ planRefreshAt: Date.now() });
     sendResponse({ received: true });
   } else if (message.type === "LOGOUT") {
@@ -139,16 +157,6 @@ chrome.runtime.onMessageExternal.addListener((message, _sender, sendResponse) =>
 // ============================================
 // Error storage — per-tab
 // ============================================
-
-type CapturedError = {
-  text: string;
-  level: string;
-  timestamp: number;
-  url?: string;
-  domain?: string;
-  source?: string;
-  tabId: number;
-};
 
 const errorBuffers = new Map<number, CapturedError[]>();
 const flushTimers = new Map<number, ReturnType<typeof setTimeout>>();
