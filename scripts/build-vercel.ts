@@ -120,7 +120,13 @@ writeFileSync(
   JSON.stringify(
     {
       version: 3,
-      cleanUrls: true,
+      overrides: {
+        "privacy.html": { path: "privacy" },
+        "terms.html": { path: "terms" },
+        "auth.html": { path: "auth" },
+        "test-errors.html": { path: "test-errors" },
+        "settings-updated.html": { path: "settings-updated" },
+      },
       routes: [
         {
           src: "/api/(.*)",
