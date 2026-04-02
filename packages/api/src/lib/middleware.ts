@@ -2,12 +2,16 @@ import type { Context, Next } from "hono";
 import { supabase } from "./supabase";
 import { errorCodes } from "@shared/types";
 
+const FREE_TIER_DAILY_LIMIT = 3;
+
 type AuthUser = {
   id: string;
   email: string;
   plan: "free" | "pro";
   stripeCustomerId: string | null;
   isAdmin: boolean;
+  sonnetUsesThisMonth: number | null;
+  sonnetMonth: string | null;
 };
 
 // Extend Hono context with user
@@ -36,7 +40,7 @@ export const authMiddleware = async (c: Context, next: Next) => {
 
   const { data: user, error } = await supabase
     .from("users")
-    .select("id, email, plan, stripe_customer_id, is_admin")
+    .select("id, email, plan, stripe_customer_id, is_admin, sonnet_uses_this_month, sonnet_month")
     .eq("api_key", apiKey)
     .single();
 
@@ -58,12 +62,14 @@ export const authMiddleware = async (c: Context, next: Next) => {
     plan: user.is_admin ? "pro" : user.plan,
     stripeCustomerId: user.stripe_customer_id,
     isAdmin: user.is_admin,
+    sonnetUsesThisMonth: user.sonnet_uses_this_month,
+    sonnetMonth: user.sonnet_month,
   });
 
   await next();
 };
 
-// Rate limit check for free users
+// Rate limit check for free users (read-only — increment happens after AI success)
 export const rateLimitMiddleware = async (c: Context, next: Next) => {
   const user = c.get("user");
 
@@ -72,19 +78,20 @@ export const rateLimitMiddleware = async (c: Context, next: Next) => {
     return;
   }
 
-  // Atomic increment + check via Postgres function
-  const { data: newCount, error } = await supabase.rpc(
-    "increment_daily_usage",
-    { p_user_id: user.id }
-  );
+  const today = new Date().toISOString().split("T")[0];
+  const { data: usage, error } = await supabase
+    .from("daily_usage")
+    .select("count")
+    .eq("user_id", user.id)
+    .eq("date", today)
+    .single();
 
-  if (error) {
+  if (error && error.code !== "PGRST116") {
     console.error("[Rate Limit] Failed to check usage:", error.message);
-    await next();
-    return;
+    return c.json({ error: { message: "Service temporarily unavailable.", code: errorCodes.serverError } }, 503);
   }
 
-  if (newCount > 3) {
+  if ((usage?.count ?? 0) >= FREE_TIER_DAILY_LIMIT) {
     return c.json(
       {
         error: {
