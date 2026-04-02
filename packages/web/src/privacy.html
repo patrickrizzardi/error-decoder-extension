@@ -152,28 +152,34 @@
       <p>When you use ErrorDecoder, we collect:</p>
       <ul>
         <li><strong>Email address</strong> — Required to create your account and manage your subscription</li>
-        <li><strong>Error text you decode</strong> — The error message or stack trace you explicitly select and send for AI analysis</li>
+        <li><strong>Error text you decode</strong> — The error message or stack trace you send for AI analysis, including a preview stored in your decode history</li>
         <li><strong>Usage data</strong> — How many decodes you've used today, for rate limiting and billing</li>
-        <li><strong>Payment information</strong> — Processed by Stripe (we never see your card number or full payment details)</li>
+        <li><strong>Payment information</strong> — Processed by Stripe. We do not store or have direct access to your card details. Stripe receives your email and internal user ID as metadata.</li>
       </ul>
+
+      <h2>Automatic Browser-Side Monitoring</h2>
+      <p>When installed, the extension automatically monitors the following on pages you visit. This data is stored <strong>locally in your browser's session storage</strong> and is <strong>never sent to our servers unless you explicitly click "Decode"</strong>:</p>
+      <ul>
+        <li><strong>Console errors and warnings</strong> — Intercepted via the browser console</li>
+        <li><strong>Network failures</strong> — HTTP 4xx, 5xx, CORS errors, and connection failures (URL and status code only — request/response bodies are never read)</li>
+        <li><strong>Page URL and domain</strong> — Where the error occurred, used for context</li>
+      </ul>
+      <p><strong>Tech stack detection:</strong> The extension detects frameworks and libraries by checking for known DOM markers, script URLs, and page globals. This happens entirely in your browser and may include reading existing page cookies solely for framework detection (e.g., Laravel session detection). No tracking cookies are set.</p>
+      <p><strong>Element inspection:</strong> When you use the inspector, the selected element's HTML tag, attributes, computed styles, and CSS rules are captured. If you ask the AI about the element, this data is sent to our API.</p>
+      <p><strong>Source map resolution:</strong> When decoding errors with stack traces, the extension resolves minified filenames to original source files using source maps. Resolved file names and surrounding source code lines may be included in the data sent to our API for AI analysis.</p>
 
       <h2>What We Don't Collect</h2>
       <p>ErrorDecoder does not collect:</p>
       <ul>
-        <li>Your source code or files</li>
-        <li>Your browsing history or page visits you don't decode</li>
-        <li>Page content you don't explicitly select for decoding</li>
-        <li>Cookies for tracking or analytics (no third-party trackers)</li>
+        <li>Your browsing history (pages are only referenced when errors occur on them)</li>
+        <li>Page content beyond error messages, element inspection data, and tech detection markers described above</li>
+        <li>Cookies for tracking or advertising (we currently use no third-party trackers or analytics)</li>
         <li>Device identifiers or user fingerprinting data</li>
       </ul>
 
       <h2>How We Use Your Data</h2>
-      <p><strong>Error text analysis:</strong> When you decode an error, we send it to Claude AI (Anthropic) for analysis to generate the explanation. We never store your error text for longer than needed to generate the response, except:</p>
-      <ul>
-        <li>Pro users: Decode history is saved for 90 days so you can review past decodes</li>
-        <li>Response caching: Common errors may be cached without personal identifiers to provide faster responses</li>
-      </ul>
-      <p><strong>Email:</strong> Used only for account management, password resets, and important product updates. We will never spam you or sell your email.</p>
+      <p><strong>Error text analysis:</strong> When you decode an error, we send it to Claude AI (Anthropic) for analysis to generate the explanation. Decode history is saved to your account so you can review past decodes. Response caching for common errors may occur without personal identifiers to provide faster responses.</p>
+      <p><strong>Email:</strong> Used for account management, password resets, product updates, and occasional marketing communications about ErrorDecoder. You can unsubscribe from marketing emails at any time. We will never sell your email to third parties.</p>
       <p><strong>Usage data:</strong> Aggregated to understand how the product is used and to detect abuse.</p>
       <p><strong>We do not sell your data to anyone.</strong></p>
 
@@ -186,20 +192,26 @@
         <li><strong>Vercel</strong> — Web hosting. <a href="https://vercel.com/legal/privacy-policy" class="contact-link">Privacy policy</a></li>
       </ul>
 
+      <h2>Legal Basis for Processing (GDPR)</h2>
+      <p>We process your data based on: (a) <strong>Contractual necessity</strong> — to provide the ErrorDecoder service you signed up for; (b) <strong>Legitimate interest</strong> — for abuse prevention, rate limiting, and service improvement; (c) <strong>Consent</strong> — for marketing communications, which you may withdraw at any time by unsubscribing.</p>
+
+      <h2>Where Your Data Is Stored</h2>
+      <p>Account data is stored in Supabase (AWS US regions). API processing occurs on Vercel (US). AI processing is performed by Anthropic (US). Payment processing is handled by Stripe (US). For EU users, this constitutes a transfer of data outside the EEA.</p>
+
       <h2>Data Retention</h2>
       <ul>
         <li><strong>Account data:</strong> Kept until you delete your account. You can delete your account anytime in Settings → Delete Account.</li>
-        <li><strong>Decode history:</strong> Pro users: retained for 90 days. Free tier: not saved.</li>
+        <li><strong>Decode history:</strong> Retained until you delete your account.</li>
         <li><strong>Cached responses:</strong> Common error responses are cached to improve speed. These caches contain no personal information.</li>
         <li><strong>Payment records:</strong> Retained as required by law (typically 7 years for accounting/tax purposes)</li>
       </ul>
 
       <h2>Your Privacy Rights</h2>
       <ul>
-        <li><strong>Delete your account:</strong> Go to Settings → Delete Account. All your data will be permanently removed.</li>
-        <li><strong>Export your data:</strong> Email <a href="mailto:patrick@errordecoder.dev" class="contact-link">patrick@errordecoder.dev</a> to request a download of your data.</li>
-        <li><strong>GDPR (EU users):</strong> You have the right to access, rectify, or request erasure of your data. Email us to exercise these rights.</li>
-        <li><strong>CCPA (California users):</strong> You have the right to know what data is collected and to delete it. Contact us for requests.</li>
+        <li><strong>Delete your account:</strong> Go to Settings → Delete Account. Your data will be removed from our active systems. Payment records retained by Stripe and backups may persist as required by law.</li>
+        <li><strong>Export your data:</strong> Email <a href="mailto:patrick@errordecoder.dev" class="contact-link">patrick@errordecoder.dev</a> to request a download of your data in a machine-readable format.</li>
+        <li><strong>GDPR (EU users):</strong> You have the right to access, rectify, or request erasure of your data. Email us to exercise these rights. We will respond within 30 days.</li>
+        <li><strong>CCPA (California residents):</strong> Categories of personal information collected: identifiers (email), commercial information (subscription status), internet activity (error text submitted for decoding, usage counts). We do not sell your personal information as defined by the CCPA. You may request deletion or a copy of your data by emailing us.</li>
       </ul>
 
       <h2>Chrome Extension Permissions</h2>
@@ -209,7 +221,6 @@
         <li><strong>storage</strong> — Stores your API key, user preferences, and captured errors locally in your browser. This data stays on your device.</li>
         <li><strong>activeTab</strong> — Used to inject the debugging sidebar into the current page when you activate the extension.</li>
         <li><strong>contextMenus</strong> — Adds the "Decode this error" option to your right-click menu.</li>
-        <li><strong>sidePanel</strong> — Registers the sidebar panel with Chrome.</li>
       </ul>
 
       <h2>Security</h2>
