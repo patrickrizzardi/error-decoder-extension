@@ -10,6 +10,7 @@ import { api, API_BASE, AUTH_URL, SITE_URL } from "../shared/api";
 import type { CapturedError } from "@shared/types";
 import { checkSensitiveData, formatSensitiveWarning } from "../shared/sensitive-check";
 import { showConfirmModal } from "../shared/modal";
+import { loadHistory, saveToHistory, updateHistoryFeedback, type DecodeHistoryEntry } from "./history";
 
 type CSSRuleInfo = {
   selector: string;
@@ -30,7 +31,6 @@ type InspectedElement = {
   outerHTML?: string;
 };
 
-// Resizable textareas
 // Resizable elements
 const decodeGrip = document.getElementById("textarea-grip");
 const decodeTextarea = document.getElementById("decode-input") as HTMLTextAreaElement | null;
@@ -45,6 +45,15 @@ const elementInfo = document.getElementById("element-info");
 if (elementInfoGrip && elementInfo) setupResizableGrip(elementInfo, elementInfoGrip, 60);
 
 let renderedCount = 0;
+
+// Feature 5: module-level state for history
+let currentDecodeEntry: DecodeHistoryEntry | null = null;
+
+// Feature 6: soft upgrade nudge — count decodes this session
+let sessionDecodeCount = 0;
+
+// Feature 9: store all errors for re-sorting
+let allErrors: CapturedError[] = [];
 
 // ============================================
 // Tabs
@@ -78,7 +87,6 @@ let currentTabId: number | null = null;
 const getTabKey = () => currentTabId ? `errors_tab_${currentTabId}` : null;
 
 const resolveTabId = async () => {
-  // The sidebar iframe is injected into a page — ask the parent page's tab
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   currentTabId = tab?.id ?? null;
   return currentTabId;
@@ -91,7 +99,7 @@ chrome.storage.session.onChanged.addListener((changes) => {
     renderNewErrors((changes[key].newValue || []) as CapturedError[]);
   }
 
-  // Right-click "Decode this error" → switch to decode tab with text
+  // Right-click "Decode this error" → switch to decode tab with text filled
   if (changes.pendingText?.newValue) {
     const textarea = document.getElementById("decode-input") as HTMLTextAreaElement;
     textarea.value = changes.pendingText.newValue as string;
@@ -165,17 +173,95 @@ const init = async () => {
 
   // Check user plan for Sonnet button
   loadUserPlan();
+
+  // Feature 5: populate history dropdown on init
+  await populateHistoryDropdown();
 };
 
 init();
 
-const renderNewErrors = (errors: CapturedError[]) => {
-  for (let i = renderedCount; i < errors.length; i++) {
+// ============================================
+// Feature 9: Error Severity Sorting
+// ============================================
+
+type SortMode = "newest" | "severity" | "source";
+
+const SEVERITY_ORDER: Record<string, number> = { error: 0, network: 1, warning: 2 };
+
+const getLevelClass = (err: CapturedError): string =>
+  err.level === "warning" ? "warning" : err.text.startsWith("Network") ? "network" : "error";
+
+const getSource = (err: CapturedError): string =>
+  err.source === "network" || err.text.startsWith("Network") ? "network" : "console";
+
+const sortErrors = (errors: CapturedError[], mode: SortMode): CapturedError[] => {
+  const copy = [...errors];
+  if (mode === "severity") {
+    copy.sort((a, b) => {
+      const aLevel = getLevelClass(a);
+      const bLevel = getLevelClass(b);
+      const aOrder = SEVERITY_ORDER[aLevel] ?? 3;
+      const bOrder = SEVERITY_ORDER[bLevel] ?? 3;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return b.timestamp - a.timestamp;
+    });
+  } else if (mode === "source") {
+    // Group by source: console errors first, then network errors
+    copy.sort((a, b) => {
+      const aSource = getSource(a);
+      const bSource = getSource(b);
+      if (aSource !== bSource) return aSource === "console" ? -1 : 1;
+      return b.timestamp - a.timestamp;
+    });
+  }
+  return copy;
+};
+
+const rerenderFeed = (errors: CapturedError[]) => {
+  // Remove existing error items (keep empty-state in place)
+  errorFeed.querySelectorAll(".error-item").forEach((el) => el.remove());
+  renderedCount = 0;
+  selectedErrors.clear();
+  updateSelectionUI();
+  for (let i = 0; i < errors.length; i++) {
     const err = errors[i];
     if (!err) continue;
     renderErrorItem(err, i);
   }
   renderedCount = errors.length;
+};
+
+const getSortMode = (): SortMode => {
+  const select = document.getElementById("error-sort") as HTMLSelectElement;
+  return (select?.value ?? "newest") as SortMode;
+};
+
+document.getElementById("error-sort")!.addEventListener("change", () => {
+  const mode = getSortMode();
+  const sorted = sortErrors(allErrors, mode);
+  rerenderFeed(sorted);
+  if (allErrors.length > 0) {
+    emptyState.classList.add("hidden");
+    feedActions.classList.remove("hidden");
+  }
+  updateCounts(allErrors.length);
+});
+
+const renderNewErrors = (errors: CapturedError[]) => {
+  allErrors = errors;
+  const mode = getSortMode();
+  if (mode === "newest") {
+    // Append-only — just render newly arrived items
+    for (let i = renderedCount; i < errors.length; i++) {
+      const err = errors[i];
+      if (!err) continue;
+      renderErrorItem(err, i);
+    }
+    renderedCount = errors.length;
+  } else {
+    // Re-sort the full set and re-render
+    rerenderFeed(sortErrors(errors, mode));
+  }
   updateCounts(errors.length);
 };
 
@@ -189,7 +275,7 @@ const renderErrorItem = (err: CapturedError, index: number) => {
   // Preview first 150 chars in error feed
   const firstLine = (err.text.split("\n")[0] ?? "").slice(0, 150);
   const time = new Date(err.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-  const levelClass = err.level === "warning" ? "warning" : err.text.startsWith("Network") ? "network" : "error";
+  const levelClass = getLevelClass(err);
 
   const item = document.createElement("div");
   item.className = "error-item";
@@ -251,9 +337,9 @@ document.getElementById("decode-selected")!.addEventListener("click", async () =
   const key = getTabKey();
   if (!key) return;
   const result = await chrome.storage.session.get(key);
-  const allErrors = (result[key] || []) as CapturedError[];
+  const storedErrors = (result[key] || []) as CapturedError[];
 
-  const selected = [...selectedErrors].sort().map((i) => allErrors[i]).filter((e): e is CapturedError => !!e);
+  const selected = [...selectedErrors].sort().map((i) => storedErrors[i]).filter((e): e is CapturedError => !!e);
   if (selected.length === 0) return;
 
   // Paste into decode tab — user picks the model
@@ -285,6 +371,7 @@ document.getElementById("decode-all")!.addEventListener("click", async () => {
 document.getElementById("clear-errors")!.addEventListener("click", async () => {
   const key = getTabKey();
   if (key) await chrome.storage.session.set({ [key]: [] });
+  allErrors = [];
   renderedCount = 0;
   errorFeed.querySelectorAll(".error-item").forEach((el) => el.remove());
   emptyState.classList.remove("hidden");
@@ -337,16 +424,29 @@ const sonnetBtn = document.getElementById("decode-sonnet") as HTMLButtonElement;
 const sonnetRemaining = document.getElementById("sonnet-remaining")!;
 const haikuRemaining = document.getElementById("haiku-remaining")!;
 const usageBar = document.getElementById("usage-bar")!;
+const usageIndicator = document.getElementById("usage-indicator")!;
+
+// Track current plan for nudge logic
+let currentPlan: string = "free";
 
 const updateUsageDisplay = (used: number, limit: number, plan: string, resetsAt?: string) => {
+  currentPlan = plan;
+
   if (plan === "pro") {
     haikuRemaining.textContent = "";
     haikuBtn.disabled = false;
     usageBar.classList.add("hidden");
+    usageIndicator.classList.add("hidden");
     return;
   }
+
   const remaining = Math.max(0, limit - used);
   haikuRemaining.textContent = `(${remaining} left)`;
+
+  // Feature 7: header usage indicator
+  usageIndicator.textContent = `${used}/${limit}`;
+  usageIndicator.classList.remove("hidden", "limit-hit");
+
   usageBar.classList.remove("hidden");
   if (remaining === 0) {
     haikuBtn.disabled = true;
@@ -359,6 +459,7 @@ const updateUsageDisplay = (used: number, limit: number, plan: string, resetsAt?
       e.preventDefault();
       chrome.tabs.create({ url: `${SITE_URL}/#pricing` });
     });
+    usageIndicator.classList.add("limit-hit");
   } else {
     haikuBtn.disabled = false;
     usageBar.className = "usage-bar";
@@ -533,14 +634,173 @@ const decodeSingle = async (errorText: string, model: "haiku" | "sonnet") => {
       return;
     }
 
-    renderMarkdown(json.data.markdown, decodeResult);
+    const { markdown, decodeId, cached } = json.data as { markdown: string; decodeId?: string; cached: boolean; model: "haiku" | "sonnet" };
+
+    renderMarkdown(markdown, decodeResult);
     decodeInput.classList.add("has-results");
+
+    // Feature 3: feedback buttons
+    renderFeedbackButtons(decodeResult, decodeId);
+
+    // Feature 5: save to history
+    const entryId = crypto.randomUUID();
+    const entry: DecodeHistoryEntry = {
+      id: entryId,
+      decodeId,
+      errorPreview: errorText.slice(0, 80).replace(/\n/g, " "),
+      markdown,
+      model,
+      cached,
+      timestamp: Date.now(),
+    };
+    currentDecodeEntry = entry;
+    await saveToHistory(entry);
+    await populateHistoryDropdown();
+
+    // Feature 6: soft upgrade nudge for free users
+    sessionDecodeCount++;
+    if (currentPlan !== "pro" && sessionDecodeCount % 3 === 0) {
+      renderUpgradeNudge(decodeResult);
+    }
   } catch {
     decodeResult.innerHTML = `<p class="error-msg">Failed to connect to API.</p>`;
   } finally {
     setDecoding(false);
     loadUserPlan(); // Refresh usage count after decode
   }
+};
+
+// ============================================
+// Feature 3: Thumbs Up/Down Feedback
+// ============================================
+
+const renderFeedbackButtons = (container: HTMLElement, decodeId?: string, existingFeedback?: "up" | "down") => {
+  if (!decodeId) return;
+
+  const bar = document.createElement("div");
+  bar.className = "feedback-bar";
+
+  const upBtn = document.createElement("button");
+  upBtn.className = "feedback-btn";
+  upBtn.textContent = "👍";
+  upBtn.setAttribute("aria-label", "Helpful");
+
+  const downBtn = document.createElement("button");
+  downBtn.className = "feedback-btn";
+  downBtn.textContent = "👎";
+  downBtn.setAttribute("aria-label", "Not helpful");
+
+  // Pre-highlight if loaded from history
+  if (existingFeedback === "up") {
+    upBtn.classList.add("active-up");
+    upBtn.disabled = true;
+    downBtn.disabled = true;
+  } else if (existingFeedback === "down") {
+    downBtn.classList.add("active-down");
+    upBtn.disabled = true;
+    downBtn.disabled = true;
+  }
+
+  const submitFeedback = async (thumbsUp: boolean) => {
+    upBtn.disabled = true;
+    downBtn.disabled = true;
+    if (thumbsUp) {
+      upBtn.classList.add("active-up");
+    } else {
+      downBtn.classList.add("active-down");
+    }
+
+    // Persist in history
+    if (currentDecodeEntry) {
+      currentDecodeEntry.feedbackGiven = thumbsUp ? "up" : "down";
+      await updateHistoryFeedback(currentDecodeEntry.id, thumbsUp ? "up" : "down");
+    }
+
+    try {
+      await api.feedback({ decodeId, thumbsUp });
+    } catch {
+      // Feedback is best-effort — don't surface errors to user
+    }
+  };
+
+  upBtn.addEventListener("click", () => submitFeedback(true));
+  downBtn.addEventListener("click", () => submitFeedback(false));
+
+  bar.appendChild(upBtn);
+  bar.appendChild(downBtn);
+  container.appendChild(bar);
+};
+
+// ============================================
+// Feature 5: Decode History dropdown
+// ============================================
+
+const populateHistoryDropdown = async () => {
+  const history = await loadHistory();
+  const select = document.getElementById("history-select") as HTMLSelectElement;
+  const historyBar = document.getElementById("decode-history-bar")!;
+
+  if (history.length === 0) {
+    historyBar.classList.add("hidden");
+    return;
+  }
+
+  historyBar.classList.remove("hidden");
+  // Reset to default option then repopulate
+  select.innerHTML = `<option value="">Recent decodes...</option>`;
+  history.forEach((entry) => {
+    const option = document.createElement("option");
+    option.value = entry.id;
+    const time = new Date(entry.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    option.textContent = `${time} — ${entry.errorPreview}`;
+    select.appendChild(option);
+  });
+};
+
+document.getElementById("history-select")!.addEventListener("change", async (e) => {
+  const select = e.target as HTMLSelectElement;
+  const id = select.value;
+  if (!id) return;
+
+  const history = await loadHistory();
+  const entry = history.find((h) => h.id === id);
+  if (!entry) return;
+
+  currentDecodeEntry = entry;
+  renderMarkdown(entry.markdown, decodeResult);
+  decodeInput.classList.add("has-results");
+  renderFeedbackButtons(decodeResult, entry.decodeId, entry.feedbackGiven);
+});
+
+// ============================================
+// Feature 6: Soft upgrade nudge
+// ============================================
+
+const renderUpgradeNudge = (container: HTMLElement) => {
+  const nudge = document.createElement("div");
+  nudge.className = "upgrade-nudge";
+
+  const text = document.createElement("span");
+  text.className = "upgrade-nudge-text";
+  text.innerHTML = `Liked this? Pro gives unlimited decodes + Deep Analysis. <a href="#" class="upgrade-nudge-link">Upgrade</a>`;
+
+  const dismiss = document.createElement("button");
+  dismiss.className = "upgrade-nudge-dismiss";
+  dismiss.textContent = "×";
+  dismiss.setAttribute("aria-label", "Dismiss");
+
+  nudge.appendChild(text);
+  nudge.appendChild(dismiss);
+  container.appendChild(nudge);
+
+  nudge.querySelector(".upgrade-nudge-link")?.addEventListener("click", (e) => {
+    e.preventDefault();
+    chrome.tabs.create({ url: `${SITE_URL}/#pricing` });
+  });
+
+  dismiss.addEventListener("click", () => {
+    nudge.remove();
+  });
 };
 
 // ============================================
@@ -615,7 +875,6 @@ const showInspectResult = (el: InspectedElement) => {
   document.getElementById("inspect-result")!.innerHTML = "";
 
   // Show source map tip if on production without resolved files
-  // Check the ACTUAL page URL (from tab), not the sidebar's URL
   const hasResolvedFiles = el.cssRules?.some((r: CSSRuleInfo) => r.originalFile);
   const allInline = el.cssRules?.every((r: CSSRuleInfo) => r.file === "inline");
   const tipEl = document.getElementById("sourcemap-tip");
@@ -743,7 +1002,7 @@ document.getElementById("inspect-question")!.addEventListener("keydown", (e) => 
 // Render helpers
 // ============================================
 
-// Render markdown response with copy buttons on code blocks
+// Feature 4: Copy Full Result — prepend toolbar with Copy button
 const renderMarkdown = (markdown: string, container: HTMLElement) => {
   container.innerHTML = DOMPurify.sanitize(marked.parse(markdown) as string);
 
@@ -760,6 +1019,16 @@ const renderMarkdown = (markdown: string, container: HTMLElement) => {
     btn.addEventListener("click", () => copyToClipboard(btn, () => pre.textContent || ""));
     wrapper.appendChild(btn);
   });
+
+  // Prepend toolbar with Copy All button (captures raw markdown)
+  const toolbar = document.createElement("div");
+  toolbar.className = "result-toolbar";
+  const copyAllBtn = document.createElement("button");
+  copyAllBtn.className = "btn btn-secondary copy-all-btn";
+  copyAllBtn.textContent = "Copy";
+  copyAllBtn.addEventListener("click", () => copyToClipboard(copyAllBtn, () => markdown, "Copy"));
+  toolbar.appendChild(copyAllBtn);
+  container.insertBefore(toolbar, container.firstChild);
 };
 
 // ============================================

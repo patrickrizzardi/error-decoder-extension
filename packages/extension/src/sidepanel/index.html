@@ -12,6 +12,7 @@
     <div class="header">
       <span class="logo">ErrorDecoder</span>
       <span class="status" id="status">Listening...</span>
+      <span id="usage-indicator" class="usage-indicator hidden"></span>
       <button id="close-panel" class="icon-btn" title="Close">&times;</button>
     </div>
 
@@ -29,14 +30,44 @@
     <div id="tab-errors" class="tab-content active">
       <div id="error-feed">
         <div id="empty-state" class="empty">
-          <p>No errors captured yet</p>
-          <p class="empty-note">Console errors, failed network requests, and unhandled exceptions on this page will appear here automatically.</p>
+          <div class="onboarding">
+            <div class="onboarding-step">
+              <div class="onboarding-icon">1</div>
+              <div class="onboarding-text">
+                <strong>Errors appear here</strong>
+                <span>Console errors, failed requests, and exceptions are captured automatically</span>
+              </div>
+            </div>
+            <div class="onboarding-step">
+              <div class="onboarding-icon">2</div>
+              <div class="onboarding-text">
+                <strong>Decode with AI</strong>
+                <span>Paste errors in the Decode tab or right-click selected text on any page</span>
+              </div>
+            </div>
+            <div class="onboarding-step">
+              <div class="onboarding-icon">3</div>
+              <div class="onboarding-text">
+                <strong>Inspect elements</strong>
+                <span>Click any element to get AI explanations of its CSS and behavior</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       <div id="feed-actions" class="hidden">
-        <button id="decode-selected" class="btn btn-primary" disabled>Decode Selected</button>
-        <button id="decode-all" class="btn btn-secondary">Decode All</button>
-        <button id="clear-errors" class="btn btn-secondary">Clear</button>
+        <div class="feed-actions-top">
+          <select id="error-sort" class="error-sort">
+            <option value="newest">Newest first</option>
+            <option value="severity">Errors → Network → Warnings</option>
+            <option value="source">By source (console / network)</option>
+          </select>
+        </div>
+        <div class="feed-actions-btns">
+          <button id="decode-selected" class="btn btn-primary" disabled>Decode Selected</button>
+          <button id="decode-all" class="btn btn-secondary">Decode All</button>
+          <button id="clear-errors" class="btn btn-secondary">Clear</button>
+        </div>
       </div>
     </div>
 
@@ -54,6 +85,11 @@
           </button>
         </div>
         <div id="usage-bar" class="usage-bar hidden"></div>
+        <div id="decode-history-bar" class="history-bar hidden">
+          <select id="history-select" class="history-select">
+            <option value="">Recent decodes...</option>
+          </select>
+        </div>
       </div>
       <div id="decode-result" class="markdown-body"></div>
     </div>

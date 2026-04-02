@@ -313,9 +313,7 @@ body {
 .error-time { font-size: 10px; color: var(--text-muted); flex-shrink: 0; margin-top: 2px; }
 
 #feed-actions {
-  display: flex;
-  gap: 6px;
-  padding: 8px 10px;
+  padding: 4px 10px 8px;
   border-top: 1px solid var(--border);
   flex-shrink: 0;
 }
@@ -527,3 +525,200 @@ body {
 .footer a:hover { text-decoration: underline; }
 
 .hidden { display: none !important; }
+
+/* ============================================
+   Onboarding empty state
+   ============================================ */
+
+.onboarding { text-align: left; }
+
+.onboarding-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.onboarding-step:last-child { margin-bottom: 0; }
+
+.onboarding-icon {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+}
+
+.onboarding-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.onboarding-text strong {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.onboarding-text span {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* ============================================
+   Usage indicator in header
+   ============================================ */
+
+.usage-indicator {
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--bg);
+  padding: 1px 6px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.usage-indicator.limit-hit {
+  color: var(--error-red);
+  border-color: var(--error-red);
+}
+
+/* ============================================
+   Feedback buttons
+   ============================================ */
+
+.feedback-bar {
+  display: flex;
+  gap: 8px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+}
+
+.feedback-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: all 0.15s;
+}
+
+.feedback-btn:hover { border-color: var(--accent); color: var(--text); }
+
+.feedback-btn.active-up {
+  border-color: var(--success);
+  color: var(--success);
+  background: rgba(78, 201, 176, 0.1);
+}
+
+.feedback-btn.active-down {
+  border-color: var(--error-red);
+  color: var(--error-red);
+  background: rgba(244, 135, 113, 0.1);
+}
+
+.feedback-btn:disabled { opacity: 0.5; cursor: default; }
+
+/* ============================================
+   Copy all toolbar
+   ============================================ */
+
+.result-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 0 6px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg);
+}
+
+.copy-all-btn { font-size: 10px; padding: 3px 10px; }
+
+/* ============================================
+   Decode history bar
+   ============================================ */
+
+.history-bar { padding: 4px 10px; }
+
+.history-select {
+  width: 100%;
+  background: var(--bg-secondary);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 10px;
+}
+
+/* ============================================
+   Upgrade nudge bar
+   ============================================ */
+
+.upgrade-nudge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-top: 8px;
+  background: rgba(197, 134, 192, 0.08);
+  border: 1px solid rgba(197, 134, 192, 0.2);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.upgrade-nudge a { color: var(--sonnet); text-decoration: none; flex-shrink: 0; }
+.upgrade-nudge a:hover { text-decoration: underline; }
+
+.upgrade-nudge-dismiss {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+
+.upgrade-nudge-dismiss:hover { color: var(--text); }
+
+.upgrade-nudge-text { flex: 1; }
+
+/* ============================================
+   Error sort select + feed actions layout
+   ============================================ */
+
+.feed-actions-top {
+  padding: 6px 0 4px;
+}
+
+.feed-actions-btns {
+  display: flex;
+  gap: 6px;
+}
+
+.error-sort {
+  background: var(--bg-secondary);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 10px;
+  cursor: pointer;
+  width: 100%;
+}
