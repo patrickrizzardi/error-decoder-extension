@@ -2,13 +2,8 @@
   "installCommand": "bun install",
   "buildCommand": "bun run scripts/build-vercel.ts",
   "framework": null,
-  "functions": {
-    "api/index.mjs": {
-      "maxDuration": 30
-    }
-  },
   "rewrites": [
-    { "source": "/api/:path*", "destination": "/api/index.mjs" }
+    { "source": "/api/:path*", "destination": "/api" }
   ],
   "headers": [
     {

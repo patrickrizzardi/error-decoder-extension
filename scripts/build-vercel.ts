@@ -36,7 +36,7 @@ const result = await Bun.build({
   target: "node",
   format: "esm",
   minify: true,
-  naming: "index.mjs",
+  naming: "index.js",
   // Bundle everything — no external deps needed at runtime
   external: [],
 });
@@ -49,7 +49,7 @@ if (!result.success) {
   process.exit(1);
 }
 
-console.log("  ✓ API bundled → api/index.mjs");
+console.log("  ✓ API bundled → api/index.js");
 
 // --- 2. Build web (static files with env injection) ---
 
@@ -102,5 +102,5 @@ console.log("  ✓ Web files → public/");
 
 // --- Done ---
 console.log("\n✅ Vercel build complete");
-console.log("   api/index.mjs  — serverless function");
+console.log("   api/index.js   — serverless function");
 console.log("   public/        — static files");
