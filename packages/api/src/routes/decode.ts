@@ -7,6 +7,10 @@ import { cacheUtils } from "../lib/cache";
 import { SYSTEM_PROMPT, ELEMENT_SYSTEM_PROMPT } from "../lib/prompts";
 import { errorCodes } from "@shared/types";
 
+const FREE_TIER_CHAR_LIMIT = 1000;
+const PRO_SONNET_MONTHLY_LIMIT = 20;
+const AI_MAX_TOKENS = 1500;
+
 const decodeRequestSchema = v.object({
   errorText: v.pipe(
     v.string(),
@@ -31,11 +35,11 @@ decodeRoute.post("/", authMiddleware, rateLimitMiddleware, async (c) => {
 
   const { errorText, model: requestedModel, mode } = parsed.output;
 
-  // Free tier: enforce 1,000 char limit
-  if (user.plan === "free" && errorText.length > 1000) {
+  // Free tier: enforce char limit
+  if (user.plan === "free" && errorText.length > FREE_TIER_CHAR_LIMIT) {
     return c.json({
       error: {
-        message: "Free tier limited to 1,000 characters. Upgrade to Pro for unlimited.",
+        message: `Free tier limited to ${FREE_TIER_CHAR_LIMIT} characters. Upgrade to Pro for unlimited.`,
         code: errorCodes.inputTooLong,
       },
       upgradeUrl: `${process.env.APP_URL}/#pricing`,
@@ -48,18 +52,12 @@ decodeRoute.post("/", authMiddleware, rateLimitMiddleware, async (c) => {
   // Sonnet limit check
   if (useModel === "sonnet") {
     const currentMonth = new Date().toISOString().slice(0, 7);
-    const { data: userRow } = await supabase
-      .from("users")
-      .select("sonnet_uses_this_month, sonnet_month")
-      .eq("id", user.id)
-      .single();
+    const sonnetUsed = user.sonnetMonth === currentMonth
+      ? (user.sonnetUsesThisMonth ?? 0) : 0;
 
-    const sonnetUsed = userRow?.sonnet_month === currentMonth
-      ? (userRow?.sonnet_uses_this_month ?? 0) : 0;
-
-    if (sonnetUsed >= 20) {
+    if (sonnetUsed >= PRO_SONNET_MONTHLY_LIMIT) {
       return c.json({
-        error: { message: "Monthly Sonnet limit reached (20/month).", code: errorCodes.sonnetLimitReached },
+        error: { message: "Monthly Deep Analysis limit reached (20/month). You can still decode with Haiku.", code: errorCodes.sonnetLimitReached },
       }, 429);
     }
   }
@@ -71,8 +69,8 @@ decodeRoute.post("/", authMiddleware, rateLimitMiddleware, async (c) => {
   if (isCacheable) {
     const cached = await cacheUtils.get(errorHash);
     if (cached) {
-      logDecode(user.id, errorHash, errorText, cached as any, true, 0, 0, 0, 0);
-      return c.json({ data: { markdown: cached, model: useModel, cached: true } });
+      const decodeId = await logDecode(user.id, errorHash, errorText, cached, useModel, true, 0, 0, 0, 0);
+      return c.json({ data: { markdown: cached, model: useModel, cached: true, decodeId } });
     }
   }
 
@@ -85,7 +83,7 @@ decodeRoute.post("/", authMiddleware, rateLimitMiddleware, async (c) => {
   try {
     const completion = await anthropic.messages.create({
       model: models[useModel],
-      max_tokens: 1500,
+      max_tokens: AI_MAX_TOKENS,
       system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content: errorText }],
     });
@@ -102,7 +100,7 @@ decodeRoute.post("/", authMiddleware, rateLimitMiddleware, async (c) => {
 
     // Cache if eligible
     if (isCacheable) {
-      cacheUtils.set(errorHash, markdown as any).catch(() => {});
+      cacheUtils.set(errorHash, markdown).catch(() => {});
     }
 
     // Increment Sonnet counter
@@ -112,7 +110,12 @@ decodeRoute.post("/", authMiddleware, rateLimitMiddleware, async (c) => {
     }
 
     // Log
-    logDecode(user.id, errorHash, errorText, markdown, false, inputTokens, outputTokens, costCents, responseTimeMs);
+    logDecode(user.id, errorHash, errorText, markdown, useModel, false, inputTokens, outputTokens, costCents, responseTimeMs);
+
+    // Increment daily usage only on success (free users)
+    if (user.plan === "free" && !user.isAdmin) {
+      supabase.rpc("increment_daily_usage", { p_user_id: user.id }).then(() => {});
+    }
 
     return c.json({ data: { markdown, model: useModel, cached: false } });
   } catch (err) {
@@ -127,23 +130,28 @@ decodeRoute.post("/", authMiddleware, rateLimitMiddleware, async (c) => {
   }
 });
 
-const logDecode = (
-  userId: string, errorHash: string, errorText: string, response: any,
+const logDecode = async (
+  userId: string, errorHash: string, errorText: string, markdown: string,
+  modelUsed: "haiku" | "sonnet",
   cacheHit: boolean, inputTokens: number, outputTokens: number,
   costCents: number, responseTimeMs: number
-) => {
-  supabase.from("decodes").insert({
+): Promise<string | null> => {
+  const { data, error } = await supabase.from("decodes").insert({
     user_id: userId,
     error_text_hash: errorHash,
     error_text_preview: errorText.slice(0, 200),
-    response: typeof response === "string" ? { markdown: response } : response,
-    model_used: "haiku",
+    response: { markdown },
+    model_used: modelUsed,
     input_tokens: inputTokens,
     output_tokens: outputTokens,
     cost_cents: costCents,
     cache_hit: cacheHit,
     response_time_ms: responseTimeMs,
-  }).then(({ error }) => {
-    if (error) console.error("[Decode Log] Failed:", error.message);
-  });
+  }).select("id").single();
+
+  if (error) {
+    console.error("[Decode Log] Failed:", error.message);
+    return null;
+  }
+  return data?.id ?? null;
 };
