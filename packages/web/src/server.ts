@@ -1,5 +1,6 @@
 // Simple dev server for landing page
 // In production this is just static files on Vercel
+import { resolve as resolvePath } from "path";
 
 // Env vars to inject into auth page (replaces %%PLACEHOLDER%% tokens)
 const envReplacements: Record<string, string> = {
@@ -32,8 +33,15 @@ const server = Bun.serve({
     const url = new URL(req.url);
     let path = url.pathname === "/" ? "/index.html" : url.pathname;
 
+    // Path traversal guard
+    const baseDir = resolvePath("./packages/web/src");
+    const resolved = resolvePath(baseDir, "." + path);
+    if (!resolved.startsWith(baseDir)) {
+      return new Response("Forbidden", { status: 403 });
+    }
+
     // Add .html extension for clean URLs (/auth → /auth.html)
-    const filePath = `./packages/web/src${path}`;
+    const filePath = resolved;
     let file = Bun.file(filePath);
 
     if (!(await file.exists())) {
