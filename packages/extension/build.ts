@@ -26,8 +26,6 @@ const entrypoints = [
   { entry: "src/content/index.ts", outfile: "content.js" },
   { entry: "src/sidepanel/index.ts", outfile: "sidepanel/index.js" },
   { entry: "src/options/index.ts", outfile: "options/index.js" },
-  { entry: "src/devtools/devtools.ts", outfile: "devtools/devtools.js" },
-  { entry: "src/devtools/panel.ts", outfile: "devtools/panel.js" },
 ];
 
 const results = await Promise.all(
@@ -74,7 +72,6 @@ manifest.content_scripts[2].js = ["content.js"];  // ISOLATED world — panel, i
 delete manifest.side_panel;
 delete manifest.action.default_popup; // No popup — icon click toggles sidebar
 manifest.options_page = "options/index.html";
-manifest.devtools_page = "devtools/devtools.html";
 writeFileSync(resolve(DIST, "manifest.json"), JSON.stringify(manifest, null, 2));
 console.log("✓ Manifest copied and paths updated");
 
@@ -82,8 +79,6 @@ console.log("✓ Manifest copied and paths updated");
 const htmlFiles = [
   { src: "src/sidepanel/index.html", dest: "sidepanel/index.html" },
   { src: "src/options/index.html", dest: "options/index.html" },
-  { src: "src/devtools/devtools.html", dest: "devtools/devtools.html" },
-  { src: "src/devtools/panel.html", dest: "devtools/panel.html" },
 ];
 
 for (const { src, dest } of htmlFiles) {
