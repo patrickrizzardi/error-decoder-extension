@@ -52,3 +52,7 @@ npm-debug.log*
 # Temp
 *.tmp
 *.temp
+
+# Marketing assets (large binaries)
+marketing/*.mp4
+marketing/*.gif
