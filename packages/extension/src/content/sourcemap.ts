@@ -34,10 +34,10 @@ export const resolveStackTrace = async (errorText: string): Promise<string> => {
   let m;
   while ((m = frameRegex.exec(errorText)) !== null) {
     frames.push({
-      match: m[0],
-      url: m[1],
-      line: parseInt(m[2], 10),
-      col: parseInt(m[3], 10),
+      match: m[0] as string,
+      url: m[1] as string,
+      line: parseInt(m[2] as string, 10),
+      col: parseInt(m[3] as string, 10),
     });
   }
 
@@ -132,17 +132,17 @@ const fetchSourceMap = async (scriptUrl: string): Promise<SourceMapData | null> 
 
     // Find sourceMappingURL
     const urlMatch = scriptText.match(/\/\/[#@]\s*sourceMappingURL=(.+?)(?:\s|$)/);
-    if (!urlMatch) {
+    if (!urlMatch || !urlMatch[1]) {
       mapCache.set(scriptUrl, null);
       return null;
     }
 
-    let mapUrl = urlMatch[1];
+    let mapUrl: string = urlMatch[1];
 
     // Handle data URI source maps
     if (mapUrl.startsWith("data:")) {
       const base64Match = mapUrl.match(/base64,(.+)/);
-      if (base64Match) {
+      if (base64Match?.[1]) {
         const json = atob(base64Match[1]);
         const map = JSON.parse(json);
         mapCache.set(scriptUrl, map);
@@ -254,10 +254,11 @@ const decodeMappings = (mappings: string): MappingSegment[][] => {
       for (const segment of line.split(",")) {
         const values = decodeVLQ(segment);
         if (values.length >= 4) {
-          generatedColumn += values[0];
-          sourceIndex += values[1];
-          sourceLine += values[2];
-          sourceColumn += values[3];
+          const [v0, v1, v2, v3] = values as [number, number, number, number, ...number[]];
+          generatedColumn += v0;
+          sourceIndex += v1;
+          sourceLine += v2;
+          sourceColumn += v3;
 
           segments.push({
             generatedColumn,
@@ -266,7 +267,7 @@ const decodeMappings = (mappings: string): MappingSegment[][] => {
             column: sourceColumn,
           });
         } else if (values.length >= 1) {
-          generatedColumn += values[0];
+          generatedColumn += values[0] as number;
         }
       }
     }

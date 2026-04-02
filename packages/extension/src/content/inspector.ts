@@ -158,7 +158,7 @@ const getElementInfo = (el: HTMLElement | Element) => {
   }
 
   // Find matching CSS rules and their source files
-  const matchedRules = getMatchedCSSRules(el);
+  const matchedRules = getMatchedCSSRules(el as HTMLElement);
 
   return {
     tag: el.tagName.toLowerCase(),
@@ -166,7 +166,7 @@ const getElementInfo = (el: HTMLElement | Element) => {
     id: el.id || undefined,
     classes: el.className && typeof el.className === "string" ? el.className.trim().split(/\s+/) : [],
     text: (el.textContent || "").trim().slice(0, 100),
-    attributes: getRelevantAttributes(el),
+    attributes: getRelevantAttributes(el as HTMLElement),
     styles,
     cssRules: matchedRules,
     dimensions: {
@@ -176,7 +176,7 @@ const getElementInfo = (el: HTMLElement | Element) => {
       left: Math.round(rect.left),
     },
     outerHTML: el.outerHTML.slice(0, 500),
-    parentTag: el.parentElement?.tagName.toLowerCase(),
+    parentTag: el.parentElement?.tagName.toLowerCase() ?? undefined,
     childCount: el.children.length,
   };
 };
@@ -209,6 +209,7 @@ const getMatchedCSSRules = (el: HTMLElement): Array<{ selector: string; file: st
               const props: string[] = [];
               for (let i = 0; i < rule.style.length && i < 20; i++) {
                 const prop = rule.style[i];
+                if (!prop) continue;
                 props.push(`${prop}: ${rule.style.getPropertyValue(prop)}`);
               }
 
@@ -326,14 +327,14 @@ const getCSSSourceFiles = async (cssFilename: string): Promise<string[]> => {
     }
     const urlMatch = cssText.match(/\/\*[#@]\s*sourceMappingURL=(.+?)\s*\*\//);
 
-    if (!urlMatch) { cssMapCache.set(cssFilename, null); return []; }
+    if (!urlMatch || !urlMatch[1]) { cssMapCache.set(cssFilename, null); return []; }
 
-    let mapUrl = urlMatch[1];
+    let mapUrl: string = urlMatch[1];
 
     // Handle data URI
     if (mapUrl.startsWith("data:")) {
       const base64Match = mapUrl.match(/base64,(.+)/);
-      if (base64Match) {
+      if (base64Match?.[1]) {
         const map = JSON.parse(atob(base64Match[1]));
         cssMapCache.set(cssFilename, map);
         return map.sources || [];

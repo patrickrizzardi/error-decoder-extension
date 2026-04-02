@@ -131,6 +131,29 @@ const createPanel = () => {
   let startX = 0;
   let startWidth = 0;
 
+  const onMouseMove = (e: MouseEvent) => {
+    if (!isDragging) return;
+    const delta = startX - e.clientX;
+    resizePanel(startWidth + delta);
+  };
+
+  const onMouseUp = () => {
+    if (!isDragging) return;
+    isDragging = false;
+    document.removeEventListener("mousemove", onMouseMove);
+    document.removeEventListener("mouseup", onMouseUp);
+
+    if (panelFrame) {
+      panelFrame.style.transition = "transform 0.2s ease";
+      panelFrame.style.pointerEvents = "auto";
+    }
+    document.documentElement.style.transition = "margin-right 0.2s ease";
+
+    grip.style.background = "rgba(180, 180, 180, 0.8)";
+    grip.style.height = "48px";
+    grip.style.width = "4px";
+  };
+
   dragHandle.addEventListener("mousedown", (e) => {
     isDragging = true;
     startX = e.clientX;
@@ -146,34 +169,17 @@ const createPanel = () => {
     grip.style.background = "rgba(86, 156, 214, 0.9)";
     grip.style.height = "64px";
 
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+
     e.preventDefault();
-  });
-
-  document.addEventListener("mousemove", (e) => {
-    if (!isDragging) return;
-    const delta = startX - e.clientX;
-    resizePanel(startWidth + delta);
-  });
-
-  document.addEventListener("mouseup", () => {
-    if (!isDragging) return;
-    isDragging = false;
-
-    if (panelFrame) {
-      panelFrame.style.transition = "transform 0.2s ease";
-      panelFrame.style.pointerEvents = "auto";
-    }
-    document.documentElement.style.transition = "margin-right 0.2s ease";
-
-    grip.style.background = "rgba(180, 180, 180, 0.8)";
-    grip.style.height = "48px";
-    grip.style.width = "4px";
   });
 
   document.body.appendChild(dragHandle);
 
   // Listen for close message from the iframe
   window.addEventListener("message", (event) => {
+    if (!event.origin.startsWith("chrome-extension://")) return;
     if (event.data?.type === "ERRORDECODER_CLOSE") {
       hidePanel();
     }
