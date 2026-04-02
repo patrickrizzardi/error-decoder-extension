@@ -3,7 +3,7 @@
   "name": "ErrorDecoder — AI Debugging Sidebar",
   "version": "1.0.0",
   "description": "Always-on debugging sidebar. Real-time error stream, network monitoring, element inspection, AI-powered fixes.",
-  "permissions": ["contextMenus", "storage", "sidePanel", "activeTab", "webRequest"],
+  "permissions": ["contextMenus", "storage", "activeTab", "webRequest"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "src/background/index.ts"
@@ -26,9 +26,6 @@
       "run_at": "document_idle"
     }
   ],
-  "side_panel": {
-    "default_path": "src/sidepanel/index.html"
-  },
   "action": {
     "default_icon": {
       "16": "icons/icon-16.png",

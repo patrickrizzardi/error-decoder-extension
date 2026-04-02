@@ -71,7 +71,7 @@ manifest.background.service_worker = "background.js";
 manifest.content_scripts[0].js = ["capture.js"];  // MAIN world — overrides console/fetch
 manifest.content_scripts[1].js = ["relay.js"];    // ISOLATED world — relays CustomEvents at document_start
 manifest.content_scripts[2].js = ["content.js"];  // ISOLATED world — panel, inspector at document_idle
-manifest.side_panel.default_path = "sidepanel/index.html";
+delete manifest.side_panel;
 delete manifest.action.default_popup; // No popup — icon click toggles sidebar
 manifest.options_page = "options/index.html";
 manifest.devtools_page = "devtools/devtools.html";
