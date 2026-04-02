@@ -4,7 +4,6 @@
   "framework": null,
   "functions": {
     "api/index.mjs": {
-      "runtime": "@vercel/node@3",
       "maxDuration": 30
     }
   },
