@@ -1,6 +1,6 @@
 # Session State: Error Decoder
 
-**Last Updated**: 2026-03-31
+**Last Updated**: 2026-04-02
 
 ---
 
@@ -22,7 +22,7 @@
 
 **PRODUCT PIVOT (2026-03-28)**: Original "error decoder" concept killed. Chrome's built-in DevTools AI (Gemini) does error explanation for free with deeper page access. New product is a DEBUGGING DASHBOARD SIDEBAR that lives on the page — NOT inside DevTools. Streams errors in real-time, monitors network requests, inspects elements, detects tech stack, resolves source maps, batch-decodes with AI.
 
-**Immediate Task**: Fixing auth/logout flow. User couldn't log out — Supabase sessions persisted due to autoRefreshToken race condition. Fixed in this session.
+**Immediate Task**: User asked about next steps for deployment. Provided summary of remaining blockers. Waiting for direction on whether to tackle code tasks (pin extension ID, auth wiring) or deploy existing work to production.
 
 **Just Completed (2026-03-31)**:
 - Fixed logout race condition in auth.html: logout now runs BEFORE Supabase client creation, uses throwaway client with autoRefreshToken:false, calls signOut({scope:"global"})
@@ -44,14 +44,15 @@
 - Docker Compose: api (4001), web (4000), stripe-cli
 - Copy buttons, loading states, no-double-click protection
 - Custom scrollbars, resize grips (textarea + sidebar)
+- Landing page complete (hero, how it works, pricing, FAQ, privacy, terms)
+- Chrome Web Store listing copy + permission justifications written
 
-**What's Left**:
-- Phase 4: Auth flow testing (logout fixed, need to test full signup→checkout flow)
-- Phase 7: Usage tracking UI (free tier limits in sidebar)
-- Phase 10: Landing page
-- Phase 11: Testing & QA
-- Phase 12: Chrome Web Store prep
-- Phase 13: Verification sweep
+**What's Left (Deployment Blockers)**:
+- Phase 4: Auth flow remaining (4.1 Supabase config, 4.5 pin extension ID, 4.6 E2E test)
+- Phase 11: Testing & QA (manual — Patrick)
+- Phase 12: Final icons (12.1 — Patrick design), screenshots (12.2 — Patrick browser)
+- Stripe dashboard: Enable PayPal + CashApp payment methods
+- Uncommitted changes in working tree need to be committed
 
 ---
 

@@ -1,0 +1,249 @@
+- generic [active] [ref=e1]:
+  - navigation "Main navigation" [ref=e2]:
+    - generic [ref=e3]:
+      - link "ErrorDecoder home" [ref=e4] [cursor=pointer]:
+        - /url: /
+        - text: ErrorDecoder
+      - generic [ref=e5]:
+        - link "Features" [ref=e6] [cursor=pointer]:
+          - /url: "#features"
+        - link "Pricing" [ref=e7] [cursor=pointer]:
+          - /url: "#pricing"
+        - link "FAQ" [ref=e8] [cursor=pointer]:
+          - /url: "#faq"
+      - link "Add ErrorDecoder to Chrome for free" [ref=e9] [cursor=pointer]:
+        - /url: "#"
+        - text: Add to Chrome — Free
+  - main [ref=e10]:
+    - generic [ref=e12]:
+      - generic [ref=e13]: Chrome Extension — Free to Start
+      - heading "Stop Googling Error Messages" [level=1] [ref=e14]:
+        - text: Stop Googling
+        - text: Error Messages
+      - paragraph [ref=e15]: AI-powered sidebar that catches errors in real-time, explains what went wrong, and shows you the fix. Right on the page.
+      - generic [ref=e16]:
+        - link "Add ErrorDecoder to Chrome for free" [ref=e17] [cursor=pointer]:
+          - /url: "#"
+          - text: ⚡ Add to Chrome — Free
+        - link "See how it works ↓" [ref=e18] [cursor=pointer]:
+          - /url: "#how-it-works"
+      - img "Preview of ErrorDecoder sidebar decoding a CORS error" [ref=e19]:
+        - generic [ref=e20]:
+          - generic [ref=e21]: ErrorDecoder
+          - generic [ref=e22]: React · Next.js · localhost:3000
+        - generic [ref=e23]:
+          - generic [ref=e24]:
+            - generic [ref=e26]: CORS Error
+            - generic [ref=e27]: just now
+          - generic [ref=e28]: "Access to fetch at 'https://api.example.com/users' from origin 'http://localhost:3000' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present."
+        - generic [ref=e29]:
+          - generic [ref=e30]: 🤖 AI Decode
+          - generic [ref=e31]:
+            - generic [ref=e33]: What Happened
+            - paragraph [ref=e35]:
+              - text: Your frontend at
+              - code [ref=e36]: localhost:3000
+              - text: is trying to call an API on a different origin. The server at
+              - code [ref=e37]: api.example.com
+              - text: isn't sending CORS headers, so the browser blocks the response.
+            - generic [ref=e39]: How to Fix
+            - paragraph [ref=e41]: "Add CORS headers on your API server:"
+            - code [ref=e43]: "Access-Control-Allow-Origin: http://localhost:3000"
+            - paragraph [ref=e45]: "Or if you're using Express:"
+            - code [ref=e47]: "app.use(cors({ origin: 'http://localhost:3000' }))"
+    - region "Supported technologies" [ref=e48]:
+      - paragraph [ref=e49]: Works with every stack
+      - generic [ref=e51]:
+        - generic [ref=e52]: ⚛ React
+        - generic [ref=e53]: ▲ Vue
+        - generic [ref=e54]: 🅐 Angular
+        - generic [ref=e55]: ▲ Next.js
+        - generic [ref=e56]: ● Express
+        - generic [ref=e57]: ⬡ Node.js
+        - generic [ref=e58]: ~ Tailwind
+        - generic [ref=e59]: TS TypeScript
+        - generic [ref=e60]: 🐍 Python
+        - generic [ref=e61]: 🟢 Django
+        - generic [ref=e62]: W WordPress
+        - generic [ref=e63]: ◆ Stripe
+        - generic [ref=e64]: 🔥 Firebase
+        - generic [ref=e65]: 🐛 Sentry
+        - generic [ref=e66]: ▲ GraphQL
+        - generic [ref=e67]: ✓ Vitest
+        - generic [ref=e68]: JS JavaScript
+        - generic [ref=e69]: ◉ Webpack
+        - generic [ref=e70]: ⚛ React
+        - generic [ref=e71]: ▲ Vue
+        - generic [ref=e72]: 🅐 Angular
+        - generic [ref=e73]: ▲ Next.js
+        - generic [ref=e74]: ● Express
+        - generic [ref=e75]: ⬡ Node.js
+        - generic [ref=e76]: ~ Tailwind
+        - generic [ref=e77]: TS TypeScript
+        - generic [ref=e78]: 🐍 Python
+        - generic [ref=e79]: 🟢 Django
+        - generic [ref=e80]: W WordPress
+        - generic [ref=e81]: ◆ Stripe
+        - generic [ref=e82]: 🔥 Firebase
+        - generic [ref=e83]: 🐛 Sentry
+        - generic [ref=e84]: ▲ GraphQL
+        - generic [ref=e85]: ✓ Vitest
+        - generic [ref=e86]: JS JavaScript
+        - generic [ref=e87]: ◉ Webpack
+    - generic [ref=e89]:
+      - generic [ref=e90]: How it works
+      - heading "Debug in seconds, not hours" [level=2] [ref=e91]:
+        - text: Debug in seconds,
+        - text: not hours
+      - paragraph [ref=e92]: No setup, no configuration. Open the sidebar and ErrorDecoder handles the rest.
+      - generic [ref=e93]:
+        - article [ref=e94]:
+          - generic: "1"
+          - generic [ref=e95]: "1"
+          - heading "Errors appear automatically" [level=3] [ref=e96]
+          - paragraph [ref=e97]: Console errors, network failures, and unhandled exceptions stream into the sidebar in real-time. No copy-pasting, no DevTools hunting.
+        - article [ref=e98]:
+          - generic: "2"
+          - generic [ref=e99]: "2"
+          - heading "Click Decode" [level=3] [ref=e100]
+          - paragraph [ref=e101]: Select one error or batch them all. AI analyzes the error with your tech stack context — framework, environment, and page URL all factor in.
+        - article [ref=e102]:
+          - generic: "3"
+          - generic [ref=e103]: "3"
+          - heading "Get the fix" [level=3] [ref=e104]
+          - paragraph [ref=e105]: Plain English explanation, root cause analysis, step-by-step solution, and copy-pasteable code. No more Stack Overflow rabbit holes.
+    - generic [ref=e107]:
+      - generic [ref=e108]:
+        - generic [ref=e109]: Features
+        - heading "Everything you need to debug faster" [level=2] [ref=e110]:
+          - text: Everything you need
+          - text: to debug faster
+      - generic [ref=e111]:
+        - article [ref=e112]:
+          - generic [ref=e113]: ⚡
+          - heading "Real-time error stream" [level=3] [ref=e114]
+          - paragraph [ref=e115]: Console errors, network failures, and unhandled exceptions captured automatically as they happen. No setup needed.
+        - article [ref=e116]:
+          - generic [ref=e117]: 🤖
+          - heading "AI-powered decode" [level=3] [ref=e118]
+          - paragraph [ref=e119]: Claude AI explains what happened, why it happened, and exactly how to fix it. With copy-pasteable code examples tailored to your stack.
+        - article [ref=e120]:
+          - generic [ref=e121]: 🔍
+          - heading "Element inspector" [level=3] [ref=e122]
+          - paragraph [ref=e123]: Click any element on the page. See computed styles, CSS rules, and ask AI questions about it. Like DevTools, but with a brain.
+        - article [ref=e124]:
+          - generic [ref=e125]: 🏷️
+          - heading "90+ tech detection" [level=3] [ref=e126]
+          - paragraph [ref=e127]: Auto-detects your framework — React, Vue, Django, Express, and 90+ more. AI tailors its advice to your exact stack, not generic answers.
+        - article [ref=e128]:
+          - generic [ref=e129]: 🗺️
+          - heading "Source map resolution" [level=3] [ref=e130]
+          - paragraph [ref=e131]: Maps minified stack traces back to your original source files. See the actual line that broke, not bundle.min.js:1.
+        - article [ref=e132]:
+          - generic [ref=e133]: 🌐
+          - heading "Works everywhere" [level=3] [ref=e134]
+          - paragraph [ref=e135]: Any webpage. Stack Overflow, GitHub, your localhost, production. Wherever errors happen — ErrorDecoder is already watching.
+    - generic [ref=e137]:
+      - generic [ref=e138]:
+        - generic [ref=e139]: Coverage
+        - heading "Decode any error" [level=2] [ref=e140]
+        - paragraph [ref=e141]: From cryptic stack traces to mysterious network failures — ErrorDecoder handles them all.
+      - list [ref=e142]:
+        - listitem [ref=e143]: TypeError
+        - listitem [ref=e144]: ReferenceError
+        - listitem [ref=e145]: CORS
+        - listitem [ref=e146]: 404 / 500
+        - listitem [ref=e147]: React Hydration
+        - listitem [ref=e148]: Module Not Found
+        - listitem [ref=e149]: Promise Rejection
+        - listitem [ref=e150]: Auth Failures
+        - listitem [ref=e151]: Build Errors
+        - listitem [ref=e152]: Database Errors
+        - listitem [ref=e153]: Network Timeouts
+        - listitem [ref=e154]: SyntaxError
+        - listitem [ref=e155]: Webpack Errors
+        - listitem [ref=e156]: API Errors
+    - generic [ref=e157]:
+      - radio "Monthly" [checked]
+      - radio "Yearly save 27%"
+      - generic [ref=e158]:
+        - generic [ref=e159]:
+          - generic [ref=e160]: Pricing
+          - heading "Simple, transparent pricing" [level=2] [ref=e161]
+          - paragraph [ref=e162]: Start free. Upgrade when you need more.
+        - group "Billing period" [ref=e164]:
+          - generic [ref=e165] [cursor=pointer]: Monthly
+          - generic [ref=e166] [cursor=pointer]: Yearly save 27%
+      - generic [ref=e167]:
+        - generic [ref=e168]:
+          - generic [ref=e170]:
+            - generic [ref=e171]: Free
+            - generic [ref=e172]:
+              - generic [ref=e173]: $0
+              - generic [ref=e174]: / month
+            - paragraph [ref=e175]: Forever free, no credit card.
+          - list [ref=e176]:
+            - listitem [ref=e177]: ✓ 3 decodes per day
+            - listitem [ref=e178]: ✓ Claude Haiku AI
+            - listitem [ref=e179]: ✓ Basic page context
+            - listitem [ref=e180]: ✓ 1,000 character limit
+            - listitem [ref=e181]: — Decode history
+            - listitem [ref=e182]: — Deep Analysis (Sonnet)
+          - link "Add the free version of ErrorDecoder to Chrome" [ref=e183] [cursor=pointer]:
+            - /url: "#"
+            - text: Add to Chrome — Free
+        - generic [ref=e184]:
+          - generic [ref=e186]: Most Popular
+          - generic [ref=e187]:
+            - generic [ref=e188]: Pro
+            - generic [ref=e189]:
+              - generic [ref=e190]: $9
+              - generic [ref=e191]: / month
+            - paragraph [ref=e192]: Billed yearly = $6.58/month.
+          - list [ref=e193]:
+            - listitem [ref=e194]: ✓ Unlimited decodes
+            - listitem [ref=e195]: ✓ Claude Haiku + Sonnet AI
+            - listitem [ref=e196]: ✓ Full page context
+            - listitem [ref=e197]: ✓ Unlimited input size
+            - listitem [ref=e198]: ✓ Full decode history
+            - listitem [ref=e199]: ✓ 20 Deep Analysis / month
+          - link "Start your ErrorDecoder Pro trial" [ref=e200] [cursor=pointer]:
+            - /url: /auth?checkout=month
+            - text: Start Free, Upgrade Anytime
+    - generic [ref=e202]:
+      - generic [ref=e203]:
+        - generic [ref=e204]: FAQ
+        - heading "Frequently asked questions" [level=2] [ref=e205]
+      - generic [ref=e206]:
+        - group [ref=e207]:
+          - generic "Is it really free? +" [ref=e208] [cursor=pointer]
+        - group [ref=e209]:
+          - generic "What data do you collect? +" [ref=e210] [cursor=pointer]
+        - group [ref=e211]:
+          - generic "Does it work offline? +" [ref=e212] [cursor=pointer]
+        - group [ref=e213]:
+          - generic "Which browsers are supported? +" [ref=e214] [cursor=pointer]
+        - group [ref=e215]:
+          - generic "Can it see my source code? +" [ref=e216] [cursor=pointer]
+        - group [ref=e217]:
+          - generic "What AI model powers it? +" [ref=e218] [cursor=pointer]
+    - generic [ref=e220]:
+      - heading "Ready to stop wasting time on error messages?" [level=2] [ref=e221]:
+        - text: Ready to stop wasting time
+        - text: on error messages?
+      - paragraph [ref=e222]: Join thousands of developers who decode errors in seconds, not hours.
+      - link "Add ErrorDecoder to Chrome for free" [ref=e223] [cursor=pointer]:
+        - /url: "#"
+        - text: ⚡ Add to Chrome — Free
+      - paragraph [ref=e224]: No credit card required. Free forever.
+  - contentinfo [ref=e225]:
+    - generic [ref=e226]:
+      - generic [ref=e227]:
+        - generic [ref=e228]: ErrorDecoder
+        - generic [ref=e229]: © 2026
+      - navigation "Footer navigation" [ref=e230]:
+        - link "Privacy Policy" [ref=e231] [cursor=pointer]:
+          - /url: /privacy
+        - link "Terms of Service" [ref=e232] [cursor=pointer]:
+          - /url: /terms
+      - generic [ref=e233]: Built by Patrick Rizzardi

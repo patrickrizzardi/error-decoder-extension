@@ -60,27 +60,23 @@ Build an always-on AI debugging sidebar Chrome extension. Real-time error stream
 - [x] Failed payment handling: immediate downgrade on invoice.payment_failed, re-upgrade on successful retry
 - [x] Manual API key paste (options page fallback)
 
-## Remaining Phases
+## Landing Page & Store ✅ COMPLETE
+- [x] Full landing page (hero, how it works, pricing, FAQ)
+- [x] SEO meta tags, OG tags, structured data
+- [x] Privacy policy + terms of service pages
+- [x] Chrome Web Store listing copy + permission justifications
+
+## Verification Sweep ✅ COMPLETE (2026-03-30)
+- [x] TODO/FIXME grep — clean, zero code TODOs
+- [x] Security scan — clean, no secrets in code
+- [x] Quality checklist — code audit done, DRY pass done, all findings addressed
+
+## Remaining — Deployment Blockers
 
 ### Phase 4: Auth Flow — remaining items
-- [x] 4.2 Wire auth.html placeholders via web server — ALREADY WORKING
-- [x] 4.3 Sign Up button in sidebar decode tab — ALREADY WORKING (auth-prompt CTA)
-- [x] 4.4 chrome.runtime.onMessageExternal listener — ALREADY WORKING
-- [ ] 4.1 Supabase Auth config (enable email provider, disable email confirmation for instant signup)
-- [ ] 4.5 Pin extension ID in manifest.json for dev (needed for web → extension messaging)
-- [ ] 4.6 Test full flow end-to-end: sidebar → sign up → auth page → extension gets API key → decode works
-
-### Phase 7: Usage Tracking UI ✅
-- [x] 7.1 Free tier limit enforced in sidebar UI — API returns 429, sidebar shows upgrade CTA
-- [x] 7.2 Remaining count visible in sidebar — "X of 3 free decodes used today" shown for free users
-- [x] 7.3 Upgrade CTA when limit hit — single button → homepage pricing
-- [x] 7.4 Sonnet monthly limit display — "(X left)" shown on Sonnet button for Pro users
-
-### Phase 10: Landing Page ✅
-- [x] 10.1 Full landing page (hero, how it works, pricing, FAQ)
-- [x] 10.2 SEO meta tags, OG tags, structured data
-- [x] 10.3 Privacy policy + terms of service pages — fully written, routed, linked from footer
-- [ ] 10.4 Blog section ready for content marketing — POST-LAUNCH (not a blocker)
+- [ ] 4.1 Supabase Auth config (enable email provider, disable email confirmation for instant signup) — MANUAL (Patrick, Supabase dashboard)
+- [ ] 4.5 Pin extension ID in manifest.json for dev (needed for web → extension messaging) — CODE (Claude)
+- [ ] 4.6 Test full flow end-to-end: sidebar → sign up → auth page → extension gets API key → decode works — MANUAL (Patrick)
 
 ### Phase 11: Testing & QA (Patrick — manual)
 - [ ] 11.1 Test on 15+ real error types across sites
@@ -88,21 +84,14 @@ Build an always-on AI debugging sidebar Chrome extension. Real-time error stream
 - [ ] 11.3 Edge cases (offline, restricted pages, long errors, etc.)
 
 ### Phase 12: Chrome Web Store Prep
-- [ ] 12.1 Final icons (128, 48, 16) — placeholders exist (Patrick — design)
-- [ ] 12.2 Screenshots (1280x800 x3) — (Patrick — browser)
-- [x] 12.3 Store listing copy — DONE (saved in .claude/plans/cws-listing.md)
-- [x] 12.4 Permission justifications — DONE (saved in .claude/plans/cws-listing.md)
-- [x] 12.5 Privacy policy hosted on errordecoder.dev — DONE (already at /privacy)
-
-### Phase 13: Verification Sweep ✅
-- [x] 13.1 TODO/FIXME grep — clean, zero code TODOs
-- [x] 13.2 Security scan — clean, no secrets in code (test password in seed script is fine)
-- [x] 13.3 Quality checklist — code audit done, DRY pass done, all findings addressed
-- [x] 13.4 Code audit findings addressed
+- [ ] 12.1 Final icons (128, 48, 16) — MANUAL (Patrick — design)
+- [ ] 12.2 Screenshots (1280x800 x3) — MANUAL (Patrick — browser)
 
 ### Stripe Dashboard Config (manual — Patrick)
-- [x] Set retry schedule: 4 retries in 1 week, then cancel subscription — DONE
 - [ ] Enable PayPal + CashApp payment methods in Stripe Dashboard
+
+### Uncommitted Changes
+- [ ] Commit working tree changes (multiple modified files across packages)
 
 ---
 
@@ -116,13 +105,8 @@ Build an always-on AI debugging sidebar Chrome extension. Real-time error stream
 - [ ] Update auth.html Google button to use real Supabase OAuth flow
 - [ ] Test full Google OAuth flow: extension → auth page → Google consent → back to extension
 
-### M2.2 Usage Limit UI in Sidebar
-- [ ] Show "2 of 3 free decodes remaining" after each decode
-- [ ] Upgrade CTA when limit hit ("Upgrade to Pro for unlimited decodes")
-- [ ] Sonnet remaining count for Pro users
-
-### M2.3 Stripe Upgrade Flow from Extension
-- [x] "Upgrade" button in sidebar → opens pricing page — DONE
+### M2.2 Blog Section
+- [ ] 10.4 Blog section ready for content marketing — POST-LAUNCH
 
 ---
 

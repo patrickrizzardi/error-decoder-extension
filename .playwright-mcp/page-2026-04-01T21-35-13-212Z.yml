@@ -1,0 +1,55 @@
+- generic [active] [ref=e1]:
+  - heading "Error Test Page" [level=1] [ref=e2]
+  - paragraph [ref=e3]: Trigger realistic errors to test ErrorDecoder's sidebar capture + AI decode.
+  - heading "🔗 Realistic Scenarios (Console + Network Together)" [level=2] [ref=e4]
+  - paragraph [ref=e5]: These simulate real bugs where a network failure causes a cascade of console errors — the kind of thing that's hard to debug by looking at errors individually.
+  - generic [ref=e6]:
+    - 'button "Scenario: API is Down Fetches /api/users → 500 → tries to parse response → TypeError on .map() → console.error. You''ll see 2-3 related errors that share a root cause." [ref=e7] [cursor=pointer]':
+      - generic [ref=e8]: "Scenario: API is Down"
+      - text: Fetches /api/users → 500 → tries to parse response → TypeError on .map() → console.error. You'll see 2-3 related errors that share a root cause.
+    - 'button "Scenario: CORS Blocked API Call Fetches cross-origin API without CORS headers → network error → fetch catch logs error → app shows broken state. Real CORS failure." [ref=e9] [cursor=pointer]':
+      - generic [ref=e10]: "Scenario: CORS Blocked API Call"
+      - text: Fetches cross-origin API without CORS headers → network error → fetch catch logs error → app shows broken state. Real CORS failure.
+    - 'button "Scenario: Auth Token Expired Fetches with expired token → 401 → retry with refresh → refresh also fails 401 → app logs out. Chain of auth failures." [ref=e11] [cursor=pointer]':
+      - generic [ref=e12]: "Scenario: Auth Token Expired"
+      - text: Fetches with expired token → 401 → retry with refresh → refresh also fails 401 → app logs out. Chain of auth failures.
+    - 'button "Scenario: Bad Deployment Asset loads → 404 (missing chunk) → dynamic import fails → app crashes with unhandled rejection. Classic broken deploy." [ref=e13] [cursor=pointer]':
+      - generic [ref=e14]: "Scenario: Bad Deployment"
+      - text: Asset loads → 404 (missing chunk) → dynamic import fails → app crashes with unhandled rejection. Classic broken deploy.
+    - 'button "Scenario: Slow API + Race Condition Two rapid API calls → first returns slow → second overwrites state → first resolves to stale data → TypeError. Timing bug." [ref=e15] [cursor=pointer]':
+      - generic [ref=e16]: "Scenario: Slow API + Race Condition"
+      - text: Two rapid API calls → first returns slow → second overwrites state → first resolves to stale data → TypeError. Timing bug.
+  - generic [ref=e17]:
+    - heading "📋 User Dashboard (Fake App)" [level=3] [ref=e18]
+    - generic [ref=e19]:
+      - generic [ref=e20]: Alice — admin
+      - generic [ref=e21]: Bob — editor
+      - generic [ref=e22]: Charlie — viewer
+  - heading "Individual Errors" [level=2] [ref=e23]
+  - paragraph [ref=e24]: Single errors for testing individual decode.
+  - generic [ref=e25]:
+    - button "TypeError Cannot read properties of undefined" [ref=e26] [cursor=pointer]:
+      - generic [ref=e27]: TypeError
+      - text: Cannot read properties of undefined
+    - button "ReferenceError Variable is not defined" [ref=e28] [cursor=pointer]:
+      - generic [ref=e29]: ReferenceError
+      - text: Variable is not defined
+    - button "Unhandled Promise Async rejection with stack" [ref=e30] [cursor=pointer]:
+      - generic [ref=e31]: Unhandled Promise
+      - text: Async rejection with stack
+    - button "React-Style Error Too many re-renders" [ref=e32] [cursor=pointer]:
+      - generic [ref=e33]: React-Style Error
+      - text: Too many re-renders
+  - generic [ref=e34]:
+    - strong [ref=e35]: "How to test:"
+    - text: 1. Open the ErrorDecoder sidebar (select text → right-click → Decode this error)
+    - text: 2. Hit the ← back button to see the error feed
+    - text: 3. Click a
+    - strong [ref=e36]: Scenario
+    - text: button — multiple related errors will appear
+    - text: 4. Click
+    - strong [ref=e37]: "\"Decode All Recent\""
+    - text: to get a holistic AI analysis
+    - text: 5. Try
+    - strong [ref=e38]: 🔍 Inspect
+    - text: in the sidebar footer to ask AI about page elements
