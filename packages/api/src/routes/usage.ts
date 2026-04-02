@@ -10,18 +10,10 @@ usageRoute.get("/", authMiddleware, async (c) => {
 
   const today = new Date().toISOString().split("T")[0];
 
-  const { data: usage } = await supabase
-    .from("daily_usage")
-    .select("count")
-    .eq("user_id", user.id)
-    .eq("date", today)
-    .single();
-
-  const { data: userRow } = await supabase
-    .from("users")
-    .select("sonnet_uses_this_month, sonnet_month")
-    .eq("id", user.id)
-    .single();
+  const [{ data: usage }, { data: userRow }] = await Promise.all([
+    supabase.from("daily_usage").select("count").eq("user_id", user.id).eq("date", today).single(),
+    supabase.from("users").select("sonnet_uses_this_month, sonnet_month").eq("id", user.id).single(),
+  ]);
 
   const currentMonth = new Date().toISOString().slice(0, 7);
   const sonnetUsed =
