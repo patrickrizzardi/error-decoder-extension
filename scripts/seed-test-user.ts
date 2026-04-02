@@ -18,7 +18,12 @@ const supabase = createClient(supabaseUrl, supabaseSecretKey, {
 });
 
 const TEST_EMAIL = "test@errordecoder.dev";
-const TEST_PASSWORD = "testpassword123";
+const TEST_PASSWORD = process.env.TEST_PASSWORD ?? crypto.randomUUID();
+
+if (!process.env.TEST_PASSWORD) {
+  console.log(`\nGenerated test password: ${TEST_PASSWORD}`);
+  console.log("Set TEST_PASSWORD env var to use a fixed password.\n");
+}
 
 // Check if test user already exists
 const { data: existing } = await supabase
