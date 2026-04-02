@@ -1,8 +1,8 @@
 /**
- * Vercel deployment build script
+ * Vercel deployment build script — uses Build Output API v3
  *
- * 1. Bundles the Hono API into a single serverless function (api/index.js)
- * 2. Copies web files to public/ with env vars injected into HTML
+ * Outputs to .vercel/output/ with explicit function + static config.
+ * No auto-detection — we tell Vercel exactly what to deploy.
  *
  * Run: bun run scripts/build-vercel.ts
  */
@@ -19,25 +19,27 @@ import {
 import { join, extname } from "path";
 
 const ROOT = process.cwd();
+const OUTPUT = join(ROOT, ".vercel/output");
 
-// --- 1. Bundle API ---
-
-console.log("Bundling API for Vercel...");
-
-const apiOutDir = join(ROOT, "api");
-if (existsSync(apiOutDir)) {
-  rmSync(apiOutDir, { recursive: true });
+// Clean previous output
+if (existsSync(OUTPUT)) {
+  rmSync(OUTPUT, { recursive: true });
 }
-mkdirSync(apiOutDir, { recursive: true });
+
+// --- 1. Bundle API as a Vercel Function ---
+
+console.log("Bundling API...");
+
+const funcDir = join(OUTPUT, "functions/api.func");
+mkdirSync(funcDir, { recursive: true });
 
 const result = await Bun.build({
   entrypoints: [join(ROOT, "vercel-entry.ts")],
-  outdir: apiOutDir,
+  outdir: funcDir,
   target: "node",
   format: "esm",
   minify: true,
   naming: "index.js",
-  // Bundle everything — no external deps needed at runtime
   external: [],
 });
 
@@ -49,11 +51,28 @@ if (!result.success) {
   process.exit(1);
 }
 
-console.log("  ✓ API bundled → api/index.js");
+// Function config — tells Vercel this is a Node.js function
+writeFileSync(
+  join(funcDir, ".vc-config.json"),
+  JSON.stringify({
+    runtime: "nodejs22.x",
+    handler: "index.js",
+    launcherType: "Nodejs",
+    maxDuration: 30,
+  })
+);
 
-// --- 2. Build web (static files with env injection) ---
+// ESM support — Node.js needs this to treat .js as ESM
+writeFileSync(
+  join(funcDir, "package.json"),
+  JSON.stringify({ type: "module" })
+);
 
-console.log("Building web files...");
+console.log("  ✓ API → .vercel/output/functions/api.func/");
+
+// --- 2. Static files (web pages with env injection) ---
+
+console.log("Building web...");
 
 const envReplacements: Record<string, string> = {
   "%%SUPABASE_URL%%": process.env.SUPABASE_URL ?? "",
@@ -63,12 +82,7 @@ const envReplacements: Record<string, string> = {
 };
 
 const webSrc = join(ROOT, "packages/web/src");
-const publicDir = join(ROOT, "public");
-
-if (existsSync(publicDir)) {
-  rmSync(publicDir, { recursive: true });
-}
-
+const staticDir = join(OUTPUT, "static");
 const skipFiles = new Set(["server.ts"]);
 
 const copyDir = (src: string, dest: string) => {
@@ -85,7 +99,6 @@ const copyDir = (src: string, dest: string) => {
     if (stat.isDirectory()) {
       copyDir(srcPath, destPath);
     } else if (extname(entry) === ".html") {
-      // Inject env vars into HTML
       let html = readFileSync(srcPath, "utf-8");
       for (const [token, value] of Object.entries(envReplacements)) {
         html = html.replaceAll(token, value);
@@ -97,10 +110,29 @@ const copyDir = (src: string, dest: string) => {
   }
 };
 
-copyDir(webSrc, publicDir);
-console.log("  ✓ Web files → public/");
+copyDir(webSrc, staticDir);
+console.log("  ✓ Web → .vercel/output/static/");
 
-// --- Done ---
-console.log("\n✅ Vercel build complete");
-console.log("   api/index.js   — serverless function");
-console.log("   public/        — static files");
+// --- 3. Build Output API config ---
+
+writeFileSync(
+  join(OUTPUT, "config.json"),
+  JSON.stringify(
+    {
+      version: 3,
+      routes: [
+        {
+          src: "/api/(.*)",
+          dest: "/api",
+          headers: { "Cache-Control": "no-store" },
+        },
+        { handle: "filesystem" },
+      ],
+    },
+    null,
+    2
+  )
+);
+
+console.log("  ✓ Config → .vercel/output/config.json");
+console.log("\n✅ Build Output API ready");
