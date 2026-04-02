@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { stripe, STRIPE_WEBHOOK_SECRET } from "../lib/stripe";
 import { supabase } from "../lib/supabase";
+import { errorCodes } from "@shared/types";
 
 export const stripeWebhookRoute = new Hono();
 
@@ -10,11 +11,6 @@ stripeWebhookRoute.post("/", async (c) => {
 
   if (!signature) {
     return c.json({ error: { message: "Missing signature", code: "INVALID_SIGNATURE" } }, 400);
-  }
-
-  if (!STRIPE_WEBHOOK_SECRET) {
-    console.error("[Stripe Webhook] STRIPE_WEBHOOK_SECRET not set");
-    return c.json({ error: { message: "Webhook not configured", code: "SERVER_ERROR" } }, 500);
   }
 
   const rawBody = await c.req.text();
@@ -52,6 +48,7 @@ stripeWebhookRoute.post("/", async (c) => {
 
         if (error) {
           console.error(`[Stripe Webhook] Failed to upgrade user ${userId}:`, error.message);
+          return c.json({ error: { message: "Failed to process webhook", code: errorCodes.serverError } }, 500);
         } else {
           console.log(`[Stripe Webhook] User ${userId} upgraded to Pro`);
         }
