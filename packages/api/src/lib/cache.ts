@@ -1,6 +1,5 @@
 import { createHash } from "crypto";
 import { supabase } from "./supabase";
-import type { DecodeResponse } from "@shared/types";
 
 // File path pattern — don't cache errors containing specific file paths
 const FILE_PATH_PATTERN =
@@ -23,7 +22,7 @@ export const cacheUtils = {
     );
   },
 
-  get: async (errorTextHash: string): Promise<DecodeResponse | null> => {
+  get: async (errorTextHash: string): Promise<string | null> => {
     const { data, error } = await supabase
       .from("response_cache")
       .select("response")
@@ -37,10 +36,10 @@ export const cacheUtils = {
       .rpc("increment_cache_hit", { p_hash: errorTextHash })
       .then(() => {});
 
-    return data.response as DecodeResponse;
+    return data.response as string;
   },
 
-  set: async (errorTextHash: string, response: DecodeResponse): Promise<void> => {
+  set: async (errorTextHash: string, response: string): Promise<void> => {
     await supabase.from("response_cache").upsert({
       error_text_hash: errorTextHash,
       response,
