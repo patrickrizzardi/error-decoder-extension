@@ -8,4 +8,6 @@ if (!stripeSecretKey) {
 
 export const stripe = new Stripe(stripeSecretKey);
 
-export const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? "";
+const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+if (!webhookSecret) throw new Error("Missing STRIPE_WEBHOOK_SECRET");
+export const STRIPE_WEBHOOK_SECRET = webhookSecret;
