@@ -21,21 +21,11 @@ export type DecodeRequest = {
   model?: "haiku" | "sonnet";
 };
 
-export type CodeExample = {
-  before?: string;
-  after: string;
-  language?: string;
-};
-
 export type DecodeResponse = {
-  whatHappened: string;
-  why: string[];
-  howToFix: string[];
-  codeExample?: CodeExample;
-  errorCategory?: string;
-  confidence: "high" | "medium" | "low";
+  markdown: string;
   model: "haiku" | "sonnet";
   cached: boolean;
+  decodeId?: string;
 };
 
 // --- Usage ---
@@ -93,6 +83,7 @@ export const errorCodes = {
   aiUnavailable: "AI_UNAVAILABLE",
   serverError: "SERVER_ERROR",
   notFound: "NOT_FOUND",
+  webhookSignatureFailed: "WEBHOOK_SIGNATURE_FAILED",
 } as const;
 export type ErrorCode = (typeof errorCodes)[keyof typeof errorCodes];
 
@@ -120,7 +111,7 @@ export type CapturedError = {
   url?: string;
   domain?: string;
   source?: string;
-  tabId?: number;
+  tabId: number;
 };
 
 // --- Stripe Setup Config ---
