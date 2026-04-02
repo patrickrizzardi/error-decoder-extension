@@ -109,15 +109,15 @@ decodeRoute.post("/", authMiddleware, rateLimitMiddleware, async (c) => {
       supabase.rpc("increment_sonnet_usage", { p_user_id: user.id, p_month: currentMonth }).then(() => {});
     }
 
-    // Log
-    logDecode(user.id, errorHash, errorText, markdown, useModel, false, inputTokens, outputTokens, costCents, responseTimeMs);
+    // Log and get decode ID for feedback
+    const decodeId = await logDecode(user.id, errorHash, errorText, markdown, useModel, false, inputTokens, outputTokens, costCents, responseTimeMs);
 
     // Increment daily usage only on success (free users)
     if (user.plan === "free" && !user.isAdmin) {
       supabase.rpc("increment_daily_usage", { p_user_id: user.id }).then(() => {});
     }
 
-    return c.json({ data: { markdown, model: useModel, cached: false } });
+    return c.json({ data: { markdown, model: useModel, cached: false, decodeId } });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error(`[Decode] Error: ${message}`);
