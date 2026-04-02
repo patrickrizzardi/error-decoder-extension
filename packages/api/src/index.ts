@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { secureHeaders } from "hono/secure-headers";
 import { healthRoute } from "./routes/health";
 import { decodeRoute } from "./routes/decode";
 import { usageRoute } from "./routes/usage";
@@ -15,11 +16,13 @@ import { errorHandler } from "./lib/error-handler";
 const app = new Hono().basePath("/api");
 
 // Global middleware
+app.use("*", secureHeaders());
+
 app.use(
   "*",
   cors({
     origin: [
-      "chrome-extension://*",
+      `chrome-extension://${process.env.EXTENSION_ID ?? "iffmfdckjpnejidjcpnpaeejgjengdlj"}`,
       "http://localhost:4000",
       "https://errordecoder.dev",
     ],
