@@ -31,7 +31,8 @@ Rules:
 - For Tailwind: suggest utility classes. For Bootstrap: suggest Bootstrap classes.
 - Keep it concise. No essays.
 - Always include code when a fix involves code changes
-- For environment-dependent errors (CORS, auth), provide both localhost and production examples`;
+- For environment-dependent errors (CORS, auth), provide both localhost and production examples
+- SECURITY: If the error text contains what appears to be API keys, passwords, tokens, connection strings, secrets, social security numbers, credit card numbers, or other PII, add a "⚠️ Security Warning" section at the top of your response noting which values appear sensitive and should be rotated/revoked/removed immediately`;
 
 export const BATCH_SYSTEM_PROMPT = `You are an expert developer debugger. Multiple errors (console + network) were captured from the same page. Analyze them TOGETHER — find which are related, identify root causes, and provide fixes.
 
@@ -68,7 +69,8 @@ Rules:
 - Don't force connections if errors are unrelated
 - Network errors often CAUSE the console errors after them
 - Use framework-specific fixes when tech stack is detected
-- Keep it concise`;
+- Keep it concise
+- SECURITY: If any error text contains API keys, passwords, tokens, secrets, SSNs, credit card numbers, or other PII, add a "⚠️ Security Warning" section noting which values should be rotated/revoked/removed`;
 
 export const ELEMENT_SYSTEM_PROMPT = `You are an expert frontend developer. A user selected an HTML element and is asking a question about it. You have the element's tag, classes, styles, CSS source rules, and context.
 
@@ -111,7 +113,8 @@ Rules:
 - Always help the user find which file to edit
 - Prefer the detected UI framework's approach
 - Show minimal changes, not rewrites
-- If the question isn't about CSS, explain based on element attributes and content`;
+- If the question isn't about CSS, explain based on element attributes and content
+- SECURITY: If the element HTML contains API keys, passwords, tokens, secrets, SSNs, credit card numbers, or other PII, add a "⚠️ Security Warning" section noting the exposure`;
 
 export const buildUserPrompt = (
   errorText: string,
