@@ -2,6 +2,7 @@
 // Tabs: Errors (feed) | Decode (paste + model picker) | Inspect (element AI)
 
 import { marked } from "marked";
+import DOMPurify from "dompurify";
 import { escapeHtml } from "../shared/html";
 import { copyToClipboard, setupResizableGrip } from "../shared/ui";
 import { getApiKey } from "../shared/storage";
@@ -9,6 +10,25 @@ import { api, API_BASE, AUTH_URL, SITE_URL } from "../shared/api";
 import type { CapturedError } from "@shared/types";
 import { checkSensitiveData, formatSensitiveWarning } from "../shared/sensitive-check";
 import { showConfirmModal } from "../shared/modal";
+
+type CSSRuleInfo = {
+  selector: string;
+  file: string;
+  originalFile?: string;
+  properties: string;
+};
+
+type InspectedElement = {
+  tag: string;
+  id?: string;
+  classes?: string[];
+  dimensions?: { width: number; height: number };
+  styles?: Record<string, string>;
+  cssRules?: CSSRuleInfo[];
+  text?: string;
+  parentTag?: string;
+  outerHTML?: string;
+};
 
 // Resizable textareas
 // Resizable elements
@@ -68,20 +88,20 @@ const resolveTabId = async () => {
 chrome.storage.session.onChanged.addListener((changes) => {
   const key = getTabKey();
   if (key && changes[key]) {
-    renderNewErrors(changes[key].newValue || []);
+    renderNewErrors((changes[key].newValue || []) as CapturedError[]);
   }
 
   // Right-click "Decode this error" → switch to decode tab with text
   if (changes.pendingText?.newValue) {
     const textarea = document.getElementById("decode-input") as HTMLTextAreaElement;
-    textarea.value = changes.pendingText.newValue;
+    textarea.value = changes.pendingText.newValue as string;
     switchTab("decode");
     chrome.storage.session.remove("pendingText");
   }
 
   // Element selected from inspector
   if (changes.selectedElement?.newValue) {
-    showInspectResult(changes.selectedElement.newValue);
+    showInspectResult(changes.selectedElement.newValue as InspectedElement);
   }
 
   // Inspect cancelled from page side: key present, newValue gone, oldValue was set
@@ -95,7 +115,7 @@ chrome.storage.session.onChanged.addListener((changes) => {
   if (currentTabId) {
     const techKey = `tech_tab_${currentTabId}`;
     if (changes[techKey]?.newValue) {
-      renderTechBar(changes[techKey].newValue);
+      renderTechBar(changes[techKey].newValue as typeof detectedTech);
     }
   }
 });
@@ -127,11 +147,12 @@ const init = async () => {
 
   if (key) {
     const result = await chrome.storage.session.get(key);
-    const errors = result[key] || [];
+    const errors = (result[key] || []) as CapturedError[];
     if (errors.length > 0) renderNewErrors(errors);
   }
 
-  const { pendingText } = await chrome.storage.session.get("pendingText");
+  const pendingResult = await chrome.storage.session.get("pendingText");
+  const pendingText = pendingResult["pendingText"] as string | undefined;
   if (pendingText) {
     const textarea = document.getElementById("decode-input") as HTMLTextAreaElement;
     textarea.value = pendingText;
@@ -150,7 +171,9 @@ init();
 
 const renderNewErrors = (errors: CapturedError[]) => {
   for (let i = renderedCount; i < errors.length; i++) {
-    renderErrorItem(errors[i], i);
+    const err = errors[i];
+    if (!err) continue;
+    renderErrorItem(err, i);
   }
   renderedCount = errors.length;
   updateCounts(errors.length);
@@ -164,7 +187,7 @@ const renderErrorItem = (err: CapturedError, index: number) => {
   feedActions.classList.remove("hidden");
 
   // Preview first 150 chars in error feed
-  const firstLine = err.text.split("\n")[0].slice(0, 150);
+  const firstLine = (err.text.split("\n")[0] ?? "").slice(0, 150);
   const time = new Date(err.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   const levelClass = err.level === "warning" ? "warning" : err.text.startsWith("Network") ? "network" : "error";
 
@@ -228,15 +251,16 @@ document.getElementById("decode-selected")!.addEventListener("click", async () =
   const key = getTabKey();
   if (!key) return;
   const result = await chrome.storage.session.get(key);
-  const allErrors = result[key] || [];
+  const allErrors = (result[key] || []) as CapturedError[];
 
-  const selected = [...selectedErrors].sort().map((i) => allErrors[i]).filter(Boolean);
+  const selected = [...selectedErrors].sort().map((i) => allErrors[i]).filter((e): e is CapturedError => !!e);
   if (selected.length === 0) return;
 
   // Paste into decode tab — user picks the model
   const textarea = document.getElementById("decode-input") as HTMLTextAreaElement;
-  if (selected.length === 1) {
-    textarea.value = selected[0].text;
+  const [firstSelected] = selected;
+  if (selected.length === 1 && firstSelected) {
+    textarea.value = firstSelected.text;
   } else {
     textarea.value = selected.map((e: CapturedError, i: number) => `Error ${i + 1} [${e.level}]: ${e.text}`).join("\n\n");
   }
@@ -249,7 +273,7 @@ document.getElementById("decode-all")!.addEventListener("click", async () => {
   if (!key) return;
   const result = await chrome.storage.session.get(key);
   // Batch last 15 errors for Decode All
-  const recent = (result[key] || []).slice(-15);
+  const recent = ((result[key] || []) as CapturedError[]).slice(-15);
   if (recent.length === 0) return;
 
   const textarea = document.getElementById("decode-input") as HTMLTextAreaElement;
@@ -278,7 +302,7 @@ const loadTechStack = async () => {
   if (!currentTabId) return;
   const key = `tech_tab_${currentTabId}`;
   const result = await chrome.storage.session.get(key);
-  const tech = result[key];
+  const tech = result[key] as typeof detectedTech | undefined;
   if (tech?.length) renderTechBar(tech);
 };
 
@@ -292,7 +316,7 @@ const renderTechBar = (tech: typeof detectedTech) => {
 
   bar.classList.remove("hidden");
   bar.innerHTML = tech
-    .map((t) => `<span class="tech-badge" style="background:${t.color}" title="${t.name}${t.version ? ` v${t.version}` : ""} (${t.category})">${t.name}</span>`)
+    .map((t) => `<span class="tech-badge" style="background:${escapeHtml(t.color)}" title="${escapeHtml(t.name)}${t.version ? ` v${escapeHtml(t.version)}` : ""} (${escapeHtml(t.category)})">${escapeHtml(t.name)}</span>`)
     .join("");
 };
 
@@ -314,7 +338,7 @@ const sonnetRemaining = document.getElementById("sonnet-remaining")!;
 const haikuRemaining = document.getElementById("haiku-remaining")!;
 const usageBar = document.getElementById("usage-bar")!;
 
-const updateUsageDisplay = (used: number, limit: number, plan: string) => {
+const updateUsageDisplay = (used: number, limit: number, plan: string, resetsAt?: string) => {
   if (plan === "pro") {
     haikuRemaining.textContent = "";
     haikuBtn.disabled = false;
@@ -326,7 +350,8 @@ const updateUsageDisplay = (used: number, limit: number, plan: string) => {
   usageBar.classList.remove("hidden");
   if (remaining === 0) {
     haikuBtn.disabled = true;
-    haikuRemaining.textContent = "(limit reached)";
+    const resetText = resetsAt ? ` Resets ${new Date(resetsAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "";
+    haikuRemaining.textContent = `(limit reached${resetText})`;
     usageBar.className = "usage-bar limit-hit";
     usageBar.innerHTML = `
       <a href="#" id="upgrade-cta" class="btn btn-primary btn-upgrade">Upgrade to Pro</a>`;
@@ -352,13 +377,13 @@ const loadUserPlan = async () => {
   try {
     const response = await api.usage();
     if ("data" in response) {
-      const { plan, used, limit, sonnetUsed, sonnetLimit } = response.data;
+      const { plan, used, limit, sonnetUsed, sonnetLimit, resetsAt } = response.data;
       if (plan === "pro") {
         sonnetBtn.classList.remove("hidden");
         const remaining = sonnetLimit - sonnetUsed;
         sonnetRemaining.textContent = `(${remaining} left)`;
       }
-      updateUsageDisplay(used, limit, plan);
+      updateUsageDisplay(used, limit, plan, resetsAt);
       chrome.storage.local.set({ userPlan: plan });
     }
   } catch {}
@@ -417,9 +442,11 @@ sonnetBtn.addEventListener("click", () => {
 
 const decodeSingle = async (errorText: string, model: "haiku" | "sonnet") => {
   if (isDecoding) return;
+  isDecoding = true;
 
   const apiKey = await getApiKey();
   if (!apiKey) {
+    isDecoding = false;
     decodeResult.innerHTML = `
     <div class="auth-prompt">
       <p>Sign up to start decoding errors</p>
@@ -447,7 +474,10 @@ const decodeSingle = async (errorText: string, model: "haiku" | "sonnet") => {
       cancelText: "Go Back & Edit",
       confirmDanger: true,
     });
-    if (!proceed) return;
+    if (!proceed) {
+      isDecoding = false;
+      return;
+    }
   }
 
   setDecoding(true, "Resolving source maps...");
@@ -556,7 +586,7 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-const showInspectResult = (el: any) => {
+const showInspectResult = (el: InspectedElement) => {
   document.getElementById("inspect-start")!.classList.add("hidden");
   document.getElementById("inspect-selected")!.classList.remove("hidden");
   inspectBtn.textContent = "🔍 Click to inspect an element";
@@ -586,8 +616,8 @@ const showInspectResult = (el: any) => {
 
   // Show source map tip if on production without resolved files
   // Check the ACTUAL page URL (from tab), not the sidebar's URL
-  const hasResolvedFiles = el.cssRules?.some((r: any) => r.originalFile);
-  const allInline = el.cssRules?.every((r: any) => r.file === "inline");
+  const hasResolvedFiles = el.cssRules?.some((r: CSSRuleInfo) => r.originalFile);
+  const allInline = el.cssRules?.every((r: CSSRuleInfo) => r.file === "inline");
   const tipEl = document.getElementById("sourcemap-tip");
 
   if (tipEl) {
@@ -612,12 +642,13 @@ inspectAskBtn.addEventListener("click", async () => {
   inspectAskBtn.disabled = true;
   inspectAskBtn.textContent = "Thinking...";
 
-  const { selectedElement } = await chrome.storage.session.get("selectedElement");
+  const elementResult = await chrome.storage.session.get("selectedElement");
+  const selectedElement = elementResult["selectedElement"] as InspectedElement | undefined;
   if (!selectedElement) return;
 
   // Build CSS rules context — include original file if resolved
   const cssRulesText = (selectedElement.cssRules || [])
-    .map((r: any) => {
+    .map((r: CSSRuleInfo) => {
       const source = r.originalFile ? `${r.originalFile} (bundled in ${r.file})` : r.file;
       return `  ${r.selector} → ${source}: ${r.properties}`;
     })
@@ -714,7 +745,7 @@ document.getElementById("inspect-question")!.addEventListener("keydown", (e) => 
 
 // Render markdown response with copy buttons on code blocks
 const renderMarkdown = (markdown: string, container: HTMLElement) => {
-  container.innerHTML = marked.parse(markdown) as string;
+  container.innerHTML = DOMPurify.sanitize(marked.parse(markdown) as string);
 
   // Add copy buttons to all code blocks
   container.querySelectorAll("pre").forEach((pre) => {
