@@ -35,6 +35,7 @@ usageRoute.get("/", authMiddleware, async (c) => {
   tomorrow.setUTCHours(0, 0, 0, 0);
 
   const response: UsageResponse = {
+    email: user.email,
     used: usage?.count ?? 0,
     limit: user.plan === "pro" ? -1 : 3,
     plan: user.plan,

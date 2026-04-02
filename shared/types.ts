@@ -41,6 +41,7 @@ export type DecodeResponse = {
 // --- Usage ---
 
 export type UsageResponse = {
+  email: string;
   used: number;
   limit: number;
   plan: UserPlan;
