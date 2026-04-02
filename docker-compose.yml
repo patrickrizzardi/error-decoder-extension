@@ -32,5 +32,16 @@ services:
     env_file: .env
     command: sh -c "bun install && bun run --hot packages/web/src/server.ts"
 
+  vercel:
+    image: node:22-slim
+    container_name: error-decoder-vercel
+    working_dir: /app
+    volumes:
+      - .:/app
+    env_file: .env
+    entrypoint: ["npx", "-y", "vercel@latest"]
+    profiles:
+      - deploy
+
 volumes:
   stripe-data:

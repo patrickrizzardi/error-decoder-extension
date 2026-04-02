@@ -39,6 +39,8 @@ packages/extension/dist/
 
 # Vercel
 .vercel/
+api/
+public/
 
 # Supabase local
 .supabase/
