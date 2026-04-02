@@ -1,8 +1,9 @@
 // Popup — paste mode with inline results
 
+import { marked } from "marked";
+import DOMPurify from "dompurify";
 import { api } from "../shared/api";
 import { copyToClipboard } from "../shared/ui";
-import type { DecodeResponse } from "@shared/types";
 
 const textarea = document.getElementById("error-input") as HTMLTextAreaElement;
 const charCurrent = document.getElementById("char-current")!;
@@ -19,22 +20,23 @@ const showState = (state: "paste" | "loading" | "result" | "error") => {
   errorState.classList.toggle("hidden", state !== "error");
 };
 
-const renderResult = (result: DecodeResponse) => {
-  document.getElementById("what-happened-text")!.textContent = result.whatHappened;
+const renderResult = (result: { markdown: string }) => {
+  const resultContent = document.getElementById("result-content")!;
+  resultContent.innerHTML = DOMPurify.sanitize(marked.parse(result.markdown) as string);
 
-  const whyList = document.getElementById("why-list")!;
-  whyList.innerHTML = result.why.map((r) => `<li>${r}</li>`).join("");
+  // Add copy buttons to code blocks
+  resultContent.querySelectorAll("pre").forEach((pre) => {
+    const wrapper = document.createElement("div");
+    wrapper.className = "code-block";
+    pre.parentNode?.insertBefore(wrapper, pre);
+    wrapper.appendChild(pre);
 
-  const fixList = document.getElementById("fix-list")!;
-  fixList.innerHTML = result.howToFix.map((f) => `<li>${f}</li>`).join("");
-
-  const codeSection = document.getElementById("code-example")!;
-  if (result.codeExample) {
-    codeSection.classList.remove("hidden");
-    document.getElementById("code-after-text")!.textContent = result.codeExample.after;
-  } else {
-    codeSection.classList.add("hidden");
-  }
+    const btn = document.createElement("button");
+    btn.className = "copy-btn";
+    btn.textContent = "Copy";
+    btn.addEventListener("click", () => copyToClipboard(btn, () => pre.textContent || ""));
+    wrapper.appendChild(btn);
+  });
 
   showState("result");
 };
@@ -68,16 +70,12 @@ decodeBtn.addEventListener("click", async () => {
   }
 });
 
-// Copy code
-document.getElementById("copy-code")?.addEventListener("click", () => {
-  const btn = document.getElementById("copy-code")!;
-  copyToClipboard(btn, () => document.getElementById("code-after-text")?.textContent ?? "");
-});
-
 // Decode another
 document.getElementById("new-decode-btn")?.addEventListener("click", () => {
   textarea.value = "";
   charCurrent.textContent = "0";
+  const resultContent = document.getElementById("result-content");
+  if (resultContent) resultContent.innerHTML = "";
   showState("paste");
   textarea.focus();
 });
