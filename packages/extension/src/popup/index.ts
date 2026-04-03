@@ -6,12 +6,17 @@ import { api } from "../shared/api";
 import { copyToClipboard } from "../shared/ui";
 
 const textarea = document.getElementById("error-input") as HTMLTextAreaElement;
-const charCurrent = document.getElementById("char-current")!;
+const charCurrent = document.getElementById("char-current");
+if (!charCurrent) throw new Error("Missing #char-current element");
 const decodeBtn = document.getElementById("decode-btn") as HTMLButtonElement;
-const pasteMode = document.getElementById("paste-mode")!;
-const loadingState = document.getElementById("loading-state")!;
-const resultState = document.getElementById("result-state")!;
-const errorState = document.getElementById("error-state")!;
+const pasteMode = document.getElementById("paste-mode");
+if (!pasteMode) throw new Error("Missing #paste-mode element");
+const loadingState = document.getElementById("loading-state");
+if (!loadingState) throw new Error("Missing #loading-state element");
+const resultState = document.getElementById("result-state");
+if (!resultState) throw new Error("Missing #result-state element");
+const errorState = document.getElementById("error-state");
+if (!errorState) throw new Error("Missing #error-state element");
 
 const showState = (state: "paste" | "loading" | "result" | "error") => {
   pasteMode.classList.toggle("hidden", state !== "paste");
@@ -21,7 +26,8 @@ const showState = (state: "paste" | "loading" | "result" | "error") => {
 };
 
 const renderResult = (result: { markdown: string }) => {
-  const resultContent = document.getElementById("result-content")!;
+  const resultContent = document.getElementById("result-content");
+  if (!resultContent) throw new Error("Missing #result-content element");
   resultContent.innerHTML = DOMPurify.sanitize(marked.parse(result.markdown) as string);
 
   // Add copy buttons to code blocks
@@ -57,14 +63,16 @@ decodeBtn.addEventListener("click", async () => {
     const response = await api.decode({ errorText: text });
 
     if ("error" in response) {
-      document.getElementById("error-message")!.textContent = response.error.message;
+      const errorMessage = document.getElementById("error-message");
+      if (errorMessage) errorMessage.textContent = response.error.message;
       showState("error");
       return;
     }
 
     renderResult(response.data);
   } catch {
-    document.getElementById("error-message")!.textContent =
+    const errorMessage = document.getElementById("error-message");
+    if (errorMessage) errorMessage.textContent =
       "Failed to connect to ErrorDecoder. Is the API running?";
     showState("error");
   }
