@@ -46,7 +46,27 @@ const redact = (match: string): string => {
   return match.slice(0, 6) + "..." + match.slice(-4);
 };
 
+// Keyword indicators — if none are present, skip the full 27-pattern scan
+const QUICK_INDICATORS = [
+  "AKIA", "sk-", "sk_", "ghp_", "gho_", "ghs_", "ghr_", "glpat-", "xox",
+  "npm_", "sbp_", "password", "secret", "Bearer", "-----BEGIN", "eyJ",
+  "postgres://", "mysql://", "mongodb://", "redis://", "amqp://",
+  "SSN", "credit", "passport", "driver",
+];
+
 export const checkSensitiveData = (text: string): SensitiveMatch[] => {
+  // Quick preflight: check keyword indicators first
+  const lowerText = text.toLowerCase();
+  const hasKeywordIndicator = QUICK_INDICATORS.some((ind) =>
+    lowerText.includes(ind.toLowerCase())
+  );
+
+  // Also check for number patterns that keywords won't catch (SSN, credit cards)
+  const hasNumberPattern = /\d{3}[-\s]\d{2}[-\s]\d{4}|\d{4}[-\s]\d{4}[-\s]\d{4}/.test(text);
+
+  if (!hasKeywordIndicator && !hasNumberPattern) return [];
+
+  // Full 27-pattern regex scan — only runs when indicators are present
   const matches: SensitiveMatch[] = [];
   const seen = new Set<string>();
 
