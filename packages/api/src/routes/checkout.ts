@@ -8,6 +8,21 @@ import { errorCodes } from "@shared/types";
 
 export const checkoutRoute = new Hono();
 
+let priceCache: Map<string, string> | null = null;
+
+const getPriceId = async (interval: string): Promise<string | null> => {
+  if (!priceCache) {
+    const prices = await stripe.prices.list({ active: true, limit: 10, expand: ["data.product"] });
+    priceCache = new Map();
+    for (const p of prices.data) {
+      if (p.metadata.app === "error-decoder" && p.metadata.interval) {
+        priceCache.set(p.metadata.interval, p.id);
+      }
+    }
+  }
+  return priceCache.get(interval) ?? null;
+};
+
 checkoutRoute.post("/", authMiddleware, async (c) => {
   const user = c.get("user");
   const rawBody = await c.req.json();
@@ -23,20 +38,10 @@ checkoutRoute.post("/", authMiddleware, async (c) => {
 
   const { interval } = parsed.output;
 
-  // Find the correct price ID from Stripe
-  const prices = await stripe.prices.list({
-    active: true,
-    limit: 10,
-    expand: ["data.product"],
-  });
+  // Find the correct price ID from Stripe (cached to avoid repeated API calls)
+  const priceId = await getPriceId(interval);
 
-  const price = prices.data.find(
-    (p) =>
-      p.metadata.app === "error-decoder" &&
-      p.metadata.interval === interval
-  );
-
-  if (!price) {
+  if (!priceId) {
     return c.json(
       { error: { message: "Price not found. Run stripe:setup first.", code: errorCodes.serverError } },
       500
@@ -53,10 +58,15 @@ checkoutRoute.post("/", authMiddleware, async (c) => {
     });
     customerId = customer.id;
 
-    await supabase
+    const { error: updateError } = await supabase
       .from("users")
       .update({ stripe_customer_id: customerId })
       .eq("id", user.id);
+
+    if (updateError) {
+      console.error("[Checkout] Failed to save Stripe customer ID:", updateError.message);
+      return c.json({ error: { message: "Failed to create checkout session.", code: errorCodes.serverError } }, 500);
+    }
   }
 
   // Create checkout session — cards only, automatic tax
@@ -65,7 +75,7 @@ checkoutRoute.post("/", authMiddleware, async (c) => {
     client_reference_id: user.id,
     mode: "subscription",
     payment_method_types: ["card", "link", "paypal", "cashapp"],
-    line_items: [{ price: price.id, quantity: 1 }],
+    line_items: [{ price: priceId, quantity: 1 }],
     automatic_tax: { enabled: true },
     customer_update: { address: "auto" },
     success_url: `${process.env.APP_URL}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
