@@ -26,27 +26,28 @@ accountRoute.delete("/", authMiddleware, async (c) => {
     }
   }
 
-  // Cascade deletes handle decodes, daily_usage via FK constraints
-  const { error: deleteError } = await supabase
-    .from("users")
-    .delete()
-    .eq("id", user.id);
-
-  if (deleteError) {
-    console.error("[Account] Delete failed:", deleteError.message);
-    return c.json(
-      { error: { message: "Failed to delete account", code: errorCodes.serverError } },
-      500
-    );
-  }
-
-  // Also delete from Supabase Auth
+  // Delete from Supabase Auth first — if this fails, nothing is lost yet
   const { error: authDeleteError } = await supabase.auth.admin.deleteUser(
     user.id
   );
 
   if (authDeleteError) {
     console.error("[Account] Auth delete failed:", authDeleteError.message);
+    return c.json(
+      { error: { message: "Failed to delete account", code: errorCodes.serverError } },
+      500
+    );
+  }
+
+  // Auth is gone — cascade deletes handle decodes, daily_usage via FK constraints
+  // If this fails, log a warning but return success (user can re-register, auth identity is gone)
+  const { error: deleteError } = await supabase
+    .from("users")
+    .delete()
+    .eq("id", user.id);
+
+  if (deleteError) {
+    console.error("[Account] App data delete failed (auth already deleted):", deleteError.message);
   }
 
   return c.json({ data: { deleted: true } });
