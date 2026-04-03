@@ -43,17 +43,17 @@ export const resolveStackTrace = async (errorText: string): Promise<string> => {
 
   if (frames.length === 0) return errorText;
 
-  // Resolve each frame (limit to first 5 for performance)
-  const resolved: Array<{ frame: typeof frames[0]; resolved: ResolvedFrame | null }> = [];
-
-  for (const frame of frames.slice(0, 5)) {
-    try {
-      const result = await resolveFrame(frame.url, frame.line, frame.col);
-      resolved.push({ frame, resolved: result });
-    } catch {
-      resolved.push({ frame, resolved: null });
-    }
-  }
+  // Resolve each frame (limit to first 5 for performance) — parallel for speed
+  const resolved = await Promise.all(
+    frames.slice(0, 5).map(async (frame) => {
+      try {
+        const result = await resolveFrame(frame.url, frame.line, frame.col);
+        return { frame, resolved: result };
+      } catch {
+        return { frame, resolved: null };
+      }
+    })
+  );
 
   // Build enriched error text
   let enriched = errorText;

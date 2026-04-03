@@ -3,7 +3,7 @@
 import { storage } from "../shared/storage";
 import { copyToClipboard } from "../shared/ui";
 import { showConfirmModal } from "../shared/modal";
-import { SITE_URL } from "../shared/api";
+import { API_BASE, SITE_URL } from "../shared/api";
 
 // Set legal links from SITE_URL — no hardcoded domains
 document.getElementById("privacy-link")?.setAttribute("href", `${SITE_URL}/privacy`);
@@ -53,26 +53,28 @@ document.getElementById("save-key")?.addEventListener("click", async () => {
   statusEl.textContent = "Validating key...";
   statusEl.style.color = "var(--accent)";
 
-  // Store temporarily so the API client uses it for the validation request
-  await storage.set("apiKey", key);
-
+  // Validate the key WITHOUT storing it first — only store on confirmed success
   try {
-    const { api } = await import("../shared/api");
-    const res = await api.usage();
-    if ("data" in res) {
-      await storage.set("userPlan", res.data.plan);
-      await storage.set("userEmail", res.data.email);
+    const res = await fetch(`${API_BASE}/usage`, {
+      headers: { Authorization: `Bearer ${key}` },
+    });
+    const json = await res.json() as { data?: { plan: string; email: string } };
+
+    if (json.data?.email) {
+      // Key is valid — NOW store it
+      await storage.set("apiKey", key);
+      await storage.set("userPlan", json.data.plan);
+      await storage.set("userEmail", json.data.email);
       statusEl.textContent = "Saved!";
       statusEl.style.color = "var(--accent)";
       input.value = "";
     } else {
-      // API returned error — key is invalid
-      await storage.remove("apiKey");
+      // Invalid key — never stored
       statusEl.textContent = "Invalid API key. Check and try again.";
       statusEl.style.color = "var(--error, #f44747)";
     }
   } catch {
-    await storage.remove("apiKey");
+    // Network error — never stored
     statusEl.textContent = "Could not validate key. Check your connection.";
     statusEl.style.color = "var(--error, #f44747)";
   }

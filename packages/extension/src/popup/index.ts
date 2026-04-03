@@ -1,9 +1,7 @@
 // Popup — paste mode with inline results
 
-import { marked } from "marked";
-import DOMPurify from "dompurify";
 import { api } from "../shared/api";
-import { copyToClipboard } from "../shared/ui";
+import { renderMarkdownWithCopyButtons } from "../shared/markdown";
 
 const textarea = document.getElementById("error-input") as HTMLTextAreaElement;
 const charCurrent = document.getElementById("char-current");
@@ -28,22 +26,7 @@ const showState = (state: "paste" | "loading" | "result" | "error") => {
 const renderResult = (result: { markdown: string }) => {
   const resultContent = document.getElementById("result-content");
   if (!resultContent) throw new Error("Missing #result-content element");
-  resultContent.innerHTML = DOMPurify.sanitize(marked.parse(result.markdown) as string);
-
-  // Add copy buttons to code blocks
-  resultContent.querySelectorAll("pre").forEach((pre) => {
-    const wrapper = document.createElement("div");
-    wrapper.className = "code-block";
-    pre.parentNode?.insertBefore(wrapper, pre);
-    wrapper.appendChild(pre);
-
-    const btn = document.createElement("button");
-    btn.className = "copy-btn";
-    btn.textContent = "Copy";
-    btn.addEventListener("click", () => copyToClipboard(btn, () => pre.textContent || ""));
-    wrapper.appendChild(btn);
-  });
-
+  renderMarkdownWithCopyButtons(result.markdown, resultContent);
   showState("result");
 };
 

@@ -177,9 +177,9 @@ const createPanel = () => {
 
   document.body.appendChild(dragHandle);
 
-  // Listen for close message from the iframe
+  // Listen for close message from the iframe — validate exact extension origin
   window.addEventListener("message", (event) => {
-    if (!event.origin.startsWith("chrome-extension://")) return;
+    if (event.origin !== `chrome-extension://${chrome.runtime.id}`) return;
     if (event.data?.type === "ERRORDECODER_CLOSE") {
       hidePanel();
     }
