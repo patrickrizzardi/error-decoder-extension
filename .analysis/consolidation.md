@@ -1,246 +1,193 @@
 # Cross-Service Consolidation Report
 
 **Analyzed**: 2026-04-02
-**Scope**: /home/patrick/development/error-decoder-extension
-**Services Identified**: packages/api, packages/extension, packages/web, shared/, scripts/
-**Consolidation Opportunities Found**: 6
+**Scope**: /home/patrick/development/error-decoder-extension (monorepo root)
+**Services Identified**: packages/api, packages/extension, packages/web, shared/
+**Consolidation Opportunities Found**: 5
 
 ---
 
-## CRITICAL — API Response Shape Mismatch: `DecodeResponse` vs `{ markdown }` 
+## HIGH — Duplicate Raw `fetch` Calls Bypassing the Typed API Client
 
-**Type**: Shared Data Source  
-**Services Involved**: packages/api/src/routes/decode.ts, packages/extension/src/devtools/panel.ts, packages/extension/src/popup/index.ts, shared/types.ts
+**Type**: Shared Logic
+**Services Involved**: extension/src/sidepanel/index.ts, extension/src/background/index.ts
+**Current State**: The extension has a typed API client at `packages/extension/src/shared/api.ts` that centralizes all API calls with auth headers, typed request/response shapes, and error envelope handling. Two surfaces bypass it and call `fetch` directly:
 
-**Current State**:  
-The API (`decode.ts:117`) returns `{ data: { markdown, model, cached } }` — a raw markdown string. `shared/types.ts:31-38` still declares `DecodeResponse` with a structured shape: `whatHappened: string`, `why: string[]`, `howToFix: string[]`, `codeExample?: CodeExample`. That type is the canonical API contract file, yet the API does not produce it.
+- `sidepanel/index.ts:595` — `fetch(`${API_BASE}/decode`, ...)` (the "Errors tab" decode path)
+- `sidepanel/index.ts:972` — `fetch(`${API_BASE}/decode`, ...)` (the "Inspect tab" decode path)
+- `background/index.ts:124` — `fetch(`${API_BASE}/usage`, ...)` (auth validation on external message)
 
-Two consumers are actively broken against the real response:
-- `packages/extension/src/devtools/panel.ts:107` calls `api.decode()` which types the response through `ApiResponse<DecodeResponse>`, then accesses `data.whatHappened` (line 117), `data.howToFix` (line 123), `data.codeExample` (line 127) — none of which exist in the actual `{ markdown }` payload.
-- `packages/extension/src/popup/index.ts:22-34` does the same: accesses `result.whatHappened`, `result.howToFix`, `result.codeExample.after`.
+`popup/index.ts:57` uses `api.decode(...)` correctly. The two sidepanel decode calls reconstruct the Authorization header manually inline, duplicate the JSON body construction, and parse the raw response shape without the typed `ApiResponse<T>` envelope. They also independently declare `const API_BASE` in `background/index.ts:6` (identical fallback to `http://localhost:4001/api`) rather than importing from `shared/api.ts`.
 
-The sidepanel (`sidepanel/index.ts:506, 694`) correctly reads `json.data.markdown` — it bypasses the `api.decode()` typed wrapper and calls `fetch` directly, which is why it works despite the type mismatch.
+**Evidence this is an issue**: `sidepanel/index.ts:595` manually sets `Authorization: \`Bearer ${apiKey}\`` — the exact same logic already exists in `shared/api.ts:28-35`. If auth header format changes (e.g., adding an API version header), it must be updated in three places. The background script has its own copy of the `API_BASE` constant declaration (`background/index.ts:5-6`) that is structurally identical to `shared/api.ts:10-18` but cannot import from it because it's a different build entry point with no shared bundling.
 
-**Proposed Consolidation**:  
-Either (a) update `DecodeResponse` in `shared/types.ts` to `{ markdown: string; model: "haiku" | "sonnet"; cached: boolean }` and fix devtools/panel.ts and popup/index.ts to render markdown, or (b) restore the structured shape in the API response. The shared types file is the single source of truth — it should match what the API actually returns.
+**Proposed Consolidation**: The two sidepanel decode calls should use `api.decode(...)` from `shared/api.ts`. The `mode: "inspect"` parameter is already part of `DecodeRequest` in `shared/types.ts`. For the background script, either export `API_BASE` via a module the background can reach at build time, or accept the constant duplication as intentional isolation (the background script has no auth state and only uses the URL for one validation call).
 
-**Trigger Condition**: Now. The devtools panel and popup are currently dead code paths — they will silently render blank UI when a user decodes an error.
+**Trigger Condition**: When auth header format changes, a new required header is added, or a third surface needs to call `/decode`.
 
-**Effort**: Low — update one type definition and two consumers. The sidepanel's markdown renderer already exists and can be extracted.
+**Effort**: Low — the two sidepanel calls are straightforward substitutions. The background script constant is acceptable as-is given the build constraint (separate IIFE bundle).
 
-**Benefits**: Eliminates silent runtime failures in two extension UIs; restores type safety.
+**Benefits**: Single source of truth for auth header construction; typed response shapes enforced at compile time; easier to add retry logic, telemetry, or timeout handling in one place.
 
-**Risks**: Choosing (a) requires both popup and devtools to adopt the `marked` markdown renderer dependency. Popup is intentionally lightweight.
-
----
-
-## HIGH — `CapturedError` Type Defined Twice
-
-**Type**: Shared Logic  
-**Services Involved**: shared/types.ts:116-124, packages/extension/src/background/index.ts:143-151
-
-**Current State**:  
-`CapturedError` is defined in `shared/types.ts` (the designated shared types file). An identical local type is declared again at `background/index.ts:143`:
-
-```
-// shared/types.ts:116
-export type CapturedError = {
-  text: string; level: string; timestamp: number;
-  url?: string; domain?: string; source?: string; tabId?: number;
-};
-
-// background/index.ts:143
-type CapturedError = {
-  text: string; level: string; timestamp: number;
-  url?: string; domain?: string; source?: string; tabId: number;
-};
-```
-
-The shapes are nearly identical but differ on `tabId`: the shared type has `tabId?: number` (optional), the local type has `tabId: number` (required). The background file does not import from `@shared/types` at all — the local type is a shadow copy. `sidepanel/index.ts:9` imports `CapturedError` from `@shared/types` for its rendering logic.
-
-If the shapes diverge further (a field added to one but not the other), the background will silently produce objects that don't match what the sidepanel expects.
-
-**Proposed Consolidation**:  
-Remove the local `type CapturedError` from `background/index.ts`, add `import type { CapturedError } from "@shared/types"`, and reconcile `tabId` optionality (`tabId: number` in the background is correct — all buffered errors have a real tabId; the shared type should match).
-
-**Trigger Condition**: Now. The divergence already exists (`tabId` optionality) and the background doesn't import from the shared package at all.
-
-**Effort**: Low — one import added, one local type removed, one field adjusted.
-
-**Benefits**: Single source of truth for a type used across three files (background, sidepanel, devtools/panel).
-
-**Risks**: None. Purely additive type alignment.
+**Risks**: The inspect-mode call passes `mode: "inspect"` which `api.decode()` currently does not support (the `DecodeRequest` type in `shared/types.ts:18-22` has no `mode` field). Consolidating requires first adding `mode` to the shared type. This is a safe, additive change.
 
 ---
 
-## HIGH — HTML Injection Environment Variables Duplicated Across Dev Server and Build Script
+## HIGH — Business Logic Constant Defined Only in API, Displayed Hardcoded in Extension UI
 
-**Type**: Shared Infrastructure  
-**Services Involved**: packages/web/src/server.ts:5-9, scripts/build-vercel.ts:77-81
+**Type**: Shared Logic
+**Services Involved**: packages/api/src/routes/decode.ts, packages/api/src/lib/middleware.ts, packages/extension/src/popup/index.html
+**Current State**: Three business-rule limits are defined as magic numbers only in the API:
 
-**Current State**:  
-Both files independently define the same `envReplacements` mapping of `%%PLACEHOLDER%%` tokens to environment variables:
+- `FREE_TIER_CHAR_LIMIT = 1000` — `decode.ts:10`
+- `FREE_TIER_DAILY_LIMIT = 3` — `middleware.ts:6`
+- `PRO_SONNET_MONTHLY_LIMIT = 20` — `decode.ts:11`
 
-`packages/web/src/server.ts`:
-```
-"%%SUPABASE_URL%%": process.env.SUPABASE_URL ?? "",
-"%%SUPABASE_PUBLISHABLE_KEY%%": process.env.SUPABASE_PUBLISHABLE_KEY ?? "",
-"%%API_BASE%%": process.env.API_URL ?? "http://localhost:4001",
-"%%EXTENSION_ID%%": process.env.EXTENSION_ID ?? "",
-```
-
-`scripts/build-vercel.ts`:
-```
-"%%SUPABASE_URL%%": process.env.SUPABASE_URL ?? "",
-"%%SUPABASE_PUBLISHABLE_KEY%%": process.env.SUPABASE_PUBLISHABLE_KEY ?? "",
-"%%API_BASE%%": process.env.APP_URL ?? "",          // <-- different env var name
-"%%EXTENSION_ID%%": process.env.EXTENSION_ID ?? "",
+The extension UI hardcodes `1,000` as a label in `popup/index.html:21`:
+```html
+<span id="char-current">0</span> / <span id="char-limit">1,000</span>
 ```
 
-There is a concrete divergence already: `%%API_BASE%%` maps to `process.env.API_URL` in the dev server but `process.env.APP_URL` in the build script. Adding a new placeholder token (e.g., `%%STRIPE_PK%%`) requires editing two files.
+The extension has no programmatic access to these values — it renders the server-returned `limit` field from the `/api/usage` response for the daily decode limit, but the char limit and sonnet limit are statically baked into HTML and strings.
 
-**Proposed Consolidation**:  
-Extract the `envReplacements` map and the `injectEnv` function to `scripts/inject-env.ts` (or a `shared/env.ts`). Both `server.ts` and `build-vercel.ts` import and use it. Also normalises the `API_URL` vs `APP_URL` discrepancy.
+**Evidence this is an issue**: If `FREE_TIER_CHAR_LIMIT` changes from 1000 to 2000 in `decode.ts`, the popup HTML counter still says "1,000" and is wrong. These are displayed as product features in UI (char count, decode count, Sonnet count) — they need to stay synchronized. The daily limit is correctly pulled from the API via `UsageResponse.limit`, but the char limit takes a different path.
 
-**Trigger Condition**: Now — a concrete bug exists (`API_URL` vs `APP_URL`). Also triggered the next time a new web page needs a new injected variable.
+**Proposed Consolidation**: Move the three limit constants into `shared/types.ts` as exported `const` values (e.g., `export const FREE_TIER_CHAR_LIMIT = 1000`). The API imports and uses them. The extension build reads them and either injects via `define` in `build.ts` or references them directly. The popup HTML `1,000` becomes a JS-populated value.
 
-**Effort**: Low — extract 8 lines to a shared file, update two imports.
+**Trigger Condition**: When any of these limits change as a product decision (e.g., increasing free tier to 5/day or 2000 chars for a promotion).
 
-**Benefits**: Single place to add/change injected environment tokens; eliminates the `API_URL`/`APP_URL` split-brain bug.
+**Effort**: Low — constants are leaf values with no dependencies. Adding them to `shared/types.ts` and importing them in both places is mechanical.
 
-**Risks**: Scripts already reference different default values (`"http://localhost:4001"` in dev vs `""` in build) — the shared extraction must preserve the right defaults per context or accept a single canonical default.
+**Benefits**: Change one number, both API enforcement and UI display update atomically.
+
+**Risks**: None meaningful. The constants are read-only values with no coupling risk.
 
 ---
 
-## MEDIUM — `DecodeRequest` Schema Defined Twice with Divergent Max-Length
+## MEDIUM — Markdown Render + Code Block Copy Pattern Duplicated Across popup and sidepanel
 
-**Type**: Shared Logic  
-**Services Involved**: packages/api/src/schemas/decode.ts:3-21, packages/api/src/routes/decode.ts:10-18
+**Type**: Shared Logic
+**Services Involved**: extension/src/popup/index.ts, extension/src/sidepanel/index.ts
+**Current State**: Both popup and sidepanel independently implement the same "render markdown, inject copy buttons on code blocks" pattern:
 
-**Current State**:  
-There are two separate Valibot schema definitions for the decode request body inside the API package itself:
+- `popup/index.ts:23-42` — `renderResult()`: calls `DOMPurify.sanitize(marked.parse(...))`, then iterates `querySelectorAll("pre")`, creates a `.code-block` wrapper div, creates a copy button, attaches `copyToClipboard`.
+- `sidepanel/index.ts:1006-1031` — `renderMarkdown()`: identical structure, with the addition of a "Copy All" toolbar prepended to the container.
 
-`packages/api/src/schemas/decode.ts` (the dedicated schema file):
-```
-maxLength(10000, "Error text too long (max 10,000 characters)")
-```
+The core parse-sanitize-inject loop is structurally identical line-for-line across both files.
 
-`packages/api/src/routes/decode.ts:10-18` (inline schema):
-```
-maxLength(15000, "Error text too long")
-```
+**Evidence this is an issue**: The pattern appears in both independently (`popup/index.ts:25` vs `sidepanel/index.ts:1007` — same `DOMPurify.sanitize(marked.parse(...) as string)` expression). The code block injection loop (`querySelectorAll("pre")`, wrapper div with class `code-block`, button with class `copy-btn`) is copied verbatim. If the copy button label, class name, or wrapper structure changes, it must be updated in both places.
 
-The route file defines its own inline `decodeRequestSchema` and uses that for validation — it does not import from `schemas/decode.ts`. The file `schemas/decode.ts` exports `ValidatedDecodeRequest` but is not imported anywhere in the API (`grep` for `decodeRequestSchema` finds no usage outside its own file). The route's inline schema also omits `pageContext` and `mode` is handled differently.
+**Proposed Consolidation**: Extract to `shared/html.ts` (which already exports `escapeHtml`) or a new `shared/markdown.ts`. A function `renderMarkdown(markdown: string, container: HTMLElement, options?: { showCopyAll?: boolean })` handles parse, sanitize, inject. Popup calls it without `copyAll`; sidepanel calls it with it.
 
-The result: `schemas/decode.ts` is dead code. The effective max-length for the API is 15,000 chars, not 10,000. The shared `DecodeRequest` type in `shared/types.ts:18-22` has no `maxLength` enforcement marker, so the extension has no way to know either limit without reading the route source.
+**Trigger Condition**: When a third UI surface (e.g., a new options page result view, or an in-page notification) needs to render AI markdown output. Also worth doing if the copy button UX changes (label, positioning, accessibility).
 
-**Proposed Consolidation**:  
-Either (a) delete `schemas/decode.ts` and accept the route-inline schema as canonical, or (b) move the route's inline schema to `schemas/decode.ts` and import it in the route, then reconcile the max-length. The CLAUDE.md spec says free tier is limited to 1,000 chars (enforced in the route at line 36) and there is no stated limit for Pro users — the 15,000 cap is the implicit Pro limit.
+**Effort**: Low — straightforward extraction of ~20 lines into a shared utility. `marked` and `DOMPurify` are already bundled into both entry points via the extension build.
 
-**Trigger Condition**: Now — `schemas/decode.ts` is unreachable dead code that will mislead anyone reading it.
+**Benefits**: Single place to update markdown rendering, copy button behavior, and sanitization options.
 
-**Effort**: Low — delete or reconcile one file.
-
-**Benefits**: Removes a confusing dead file; makes the actual enforced limit discoverable.
-
-**Risks**: None. The active schema is in the route; the dead file has no runtime effect.
+**Risks**: `marked` is an import in both files — ensuring it's available in the shared module within the Bun IIFE bundle is straightforward but needs to be verified that the shared module doesn't create a separate copy. Given both entry points are bundled independently by `build.ts`, this is a non-issue.
 
 ---
 
-## MEDIUM — Supabase Client Re-Initialized in `scripts/seed-test-user.ts`
+## MEDIUM — `DecodeRequest` Type Missing `mode` Field Used at Runtime
 
-**Type**: Shared Connection  
-**Services Involved**: packages/api/src/lib/supabase.ts, scripts/seed-test-user.ts:6-17
-
-**Current State**:  
-`packages/api/src/lib/supabase.ts` exports a singleton `supabase` service-role client. `scripts/seed-test-user.ts:6-17` creates a second independent Supabase client with identical configuration (same env vars, same `{ auth: { autoRefreshToken: false, persistSession: false } }` options):
+**Type**: Shared Infrastructure (type contract drift)
+**Services Involved**: packages/api/src/routes/decode.ts, packages/extension/src/shared/api.ts, shared/types.ts
+**Current State**: The API's `decodeRequestSchema` (in `decode.ts:14-22`) accepts an optional `mode` field with values `"error" | "inspect"`. The `sidepanel/index.ts:975` sends `mode: "inspect"` in the body. However, the shared `DecodeRequest` type in `shared/types.ts:18-22` has no `mode` field:
 
 ```typescript
-// scripts/seed-test-user.ts:16
-const supabase = createClient(supabaseUrl, supabaseSecretKey, {
-  auth: { autoRefreshToken: false, persistSession: false },
-});
+// shared/types.ts:18
+export type DecodeRequest = {
+  errorText: string;
+  pageContext?: PageContext;
+  model?: "haiku" | "sonnet";
+  // mode is missing
+};
 ```
 
-`scripts/stripe-setup.ts` correctly imports from the API lib: `import { stripe } from "../packages/api/src/lib/stripe"`. The seed script does not do the equivalent.
+The extension `api.ts` typed client's `api.decode()` function takes `DecodeRequest` — so `mode` cannot be passed through the typed client. This is why `sidepanel/index.ts:972` bypasses `api.decode()` and calls raw `fetch` instead: the type contract doesn't match what the API accepts.
 
-**Proposed Consolidation**:  
-`scripts/seed-test-user.ts` should import `supabase` from `../packages/api/src/lib/supabase` the same way `stripe-setup.ts` imports `stripe`. This removes the inline client init and reuses the validated singleton.
+**Evidence this is an issue**: `decode.ts:22` defines `mode: v.optional(v.picklist(["error", "inspect"]))` in the server schema. `shared/types.ts` does not include it. `sidepanel/index.ts:975` sends it via raw fetch because `api.decode()` doesn't accept it. This is confirmed type drift between the API schema and the shared contract — the "inspect" feature was added to the API route without updating the shared type.
 
-**Trigger Condition**: When a third script needs Supabase access, or if the client configuration in the lib changes and the script is not updated to match.
+**Proposed Consolidation**: Add `mode?: "error" | "inspect"` to `DecodeRequest` in `shared/types.ts`. The typed client `api.decode()` can then accept it, enabling `sidepanel` to use the typed client for both decode paths (resolving the HIGH finding above).
 
-**Effort**: Low — replace 12 lines of client init with one import.
+**Trigger Condition**: This is already triggered — the feature is live and shipping with an untyped workaround. Fix this before adding any further decode modes or parameters.
 
-**Benefits**: Consistent Supabase client configuration across all server-side code; single place to update if Supabase client options change.
+**Effort**: Low — a one-line additive change to `shared/types.ts`.
 
-**Risks**: Script runs outside the API server context — the import still works since both use the same env vars, but the dev must ensure `.env` is loaded before running the script (already a requirement, no change).
+**Benefits**: API contract is accurate, type safety restored for the inspect-mode decode path, enables consolidation of the raw fetch calls.
+
+**Risks**: None. Additive change, no breaking impact on existing consumers.
 
 ---
 
-## LOW — `APP_URL` vs `API_URL` Environment Variable Name Inconsistency
+## LOW — `DecodeHistoryEntry.model` Redeclares Model Union Already in Shared Types
 
-**Type**: Shared Infrastructure  
-**Services Involved**: packages/api/src/routes/decode.ts:38, packages/api/src/routes/checkout.ts:71-72, packages/api/src/routes/portal.ts:25, scripts/stripe-setup.ts:138, packages/web/src/server.ts:8, scripts/build-vercel.ts:80
+**Type**: Shared Infrastructure (type duplication)
+**Services Involved**: extension/src/sidepanel/history.ts, shared/types.ts
+**Current State**: `history.ts:6` defines:
+```typescript
+model: "haiku" | "sonnet";
+```
 
-**Current State**:  
-Two different environment variable names are used for what appears to be the same URL concept (the deployed app/API URL):
+The `shared/types.ts` already defines this union in `DecodeResponse.model` (`types.ts:26`) and `DecodeRequest.model` (`types.ts:21`), and the `models` const in `packages/api/src/lib/anthropic.ts:11-14` is the canonical list. `history.ts` redeclares the union inline instead of importing from `@shared/types`.
 
-- `process.env.APP_URL` — used in API routes for constructing redirect URLs (`decode.ts:38`, `checkout.ts:71-72`, `portal.ts:25`) and in `build-vercel.ts:80` for the `%%API_BASE%%` injection
-- `process.env.API_URL` — used in `scripts/stripe-setup.ts:138` for the webhook URL and in `packages/web/src/server.ts:8` for the `%%API_BASE%%` injection
+Similarly, `sidepanel/index.ts:637` casts `model` as `"haiku" | "sonnet"` inline rather than using the shared type.
 
-These are semantically different in the API routes (`APP_URL` = the frontend site URL for redirects) versus the scripts (`API_URL` = the API server URL for webhooks). However, in a Vercel deployment they point to the same origin, and the split naming is a source of confusion and potential `.env` misconfiguration.
+**Evidence this is an issue**: If a third model is added (e.g., `"opus"`), `history.ts:6` and the inline cast in `sidepanel/index.ts:637` would silently allow values the type union doesn't include, while `shared/types.ts` would remain the source of truth for API contracts. The inline redeclaration is low risk today with only two models, but creates a maintenance surface.
 
-**Proposed Consolidation**:  
-Document which variable should be set to what value, or unify to a single `APP_URL` in scripts as well (since in production the app and API share a domain). At minimum, the discrepancy in `%%API_BASE%%` injection (covered in the previous finding) should be fixed first.
+**Proposed Consolidation**: Export a `ModelName = "haiku" | "sonnet"` type from `shared/types.ts` (or derive it from `DecodeResponse["model"]`). Import it in `history.ts` and the sidepanel cast.
 
-**Trigger Condition**: When setting up a new environment or when a new developer joins and must configure `.env`.
+**Trigger Condition**: When a third model tier is added to the product.
 
-**Effort**: Low — rename one env var reference in `stripe-setup.ts` and `web/server.ts`, update `.env.example` if one exists.
+**Effort**: Low — one-line export in shared types, two import updates.
 
-**Benefits**: Single env var name to configure; eliminates silent misconfiguration where one file gets a URL and the other does not.
+**Benefits**: Adding a model requires one change in one place; all consumers pick it up.
 
-**Risks**: Renaming env vars requires updating `.env` files everywhere the app is deployed (local, Vercel). Low risk, minor coordination.
+**Risks**: None.
 
 ---
 
 ## Service Dependency Map
 
 ```
+shared/types.ts
+    ├── packages/api/src/routes/decode.ts       (errorCodes, DecodeRequest shape)
+    ├── packages/api/src/routes/usage.ts         (UsageResponse)
+    ├── packages/api/src/routes/feedback.ts      (errorCodes)
+    ├── packages/api/src/routes/auth.ts          (errorCodes)
+    ├── packages/api/src/routes/checkout.ts      (errorCodes)
+    ├── packages/api/src/routes/portal.ts        (errorCodes)
+    ├── packages/api/src/routes/account.ts       (errorCodes)
+    ├── packages/api/src/routes/webhook-stripe.ts (errorCodes)
+    ├── packages/api/src/lib/middleware.ts        (errorCodes)
+    ├── packages/api/src/lib/error-handler.ts    (errorCodes)
+    ├── packages/extension/src/shared/api.ts     (ApiResponse, DecodeRequest, DecodeResponse, UsageResponse, FeedbackRequest)
+    ├── packages/extension/src/shared/storage.ts (ExtensionStorage)
+    ├── packages/extension/src/background/index.ts (CapturedError)
+    └── packages/extension/src/sidepanel/index.ts  (CapturedError)
+
+packages/extension/src/shared/api.ts
+    ├── packages/extension/src/sidepanel/index.ts  (api, API_BASE, AUTH_URL, SITE_URL)
+    ├── packages/extension/src/popup/index.ts       (api)
+    └── packages/extension/src/options/index.ts     (api, SITE_URL, AUTH_URL)
+
+packages/extension/src/shared/storage.ts
+    ├── packages/extension/src/sidepanel/index.ts
+    ├── packages/extension/src/options/index.ts
+    └── packages/extension/src/popup/* (via getApiKey)
+
 packages/api/src/lib/supabase.ts
-  ← packages/api/src/lib/middleware.ts        (auth + rate limit)
-  ← packages/api/src/lib/cache.ts             (response cache)
-  ← packages/api/src/routes/decode.ts         (usage + logging)
-  ← packages/api/src/routes/auth.ts           (JWT verification)
-  ← packages/api/src/routes/usage.ts          (usage queries)
-  ← packages/api/src/routes/checkout.ts       (customer upsert)
-  ← packages/api/src/routes/webhook-stripe.ts (plan sync)
-  ← packages/api/src/routes/feedback.ts       (decode updates)
-  ← packages/api/src/routes/account.ts        (delete)
-  ← scripts/seed-test-user.ts                 (DUPLICATE client init)
+    └── all API routes (single connection, correctly shared)
+
+packages/api/src/lib/anthropic.ts
+    └── packages/api/src/routes/decode.ts only (correctly isolated)
 
 packages/api/src/lib/stripe.ts
-  ← packages/api/src/routes/checkout.ts
-  ← packages/api/src/routes/portal.ts
-  ← packages/api/src/routes/account.ts
-  ← packages/api/src/routes/webhook-stripe.ts
-  ← scripts/stripe-setup.ts                   (correctly imports from lib)
-
-shared/types.ts
-  ← packages/api/src/lib/middleware.ts
-  ← packages/api/src/lib/cache.ts
-  ← packages/api/src/lib/error-handler.ts
-  ← packages/api/src/routes/usage.ts
-  ← packages/extension/src/shared/api.ts
-  ← packages/extension/src/shared/storage.ts
-  ← packages/extension/src/sidepanel/index.ts
-  ← packages/extension/src/popup/index.ts       (shape mismatch)
-  ← packages/extension/src/devtools/panel.ts    (shape mismatch)
-  ← CapturedError ALSO redefined in background/index.ts
-
-API URL config (%%API_BASE%%, __API_BASE__)
-  ← packages/web/src/server.ts       (reads API_URL)
-  ← scripts/build-vercel.ts          (reads APP_URL)  ← diverges here
-  ← packages/extension/build.ts      (reads API_BASE)
+    ├── packages/api/src/routes/checkout.ts
+    ├── packages/api/src/routes/portal.ts
+    ├── packages/api/src/routes/account.ts
+    └── packages/api/src/routes/webhook-stripe.ts (correctly shared)
 ```
 
 ---
@@ -249,27 +196,30 @@ API URL config (%%API_BASE%%, __API_BASE__)
 
 ### Quick Wins (low effort, clear benefit)
 
-1. **CRITICAL — Fix `DecodeResponse` type / devtools + popup shape mismatch** — devtools panel and popup are silently broken right now. This is the most impactful fix.
-2. **HIGH — Remove duplicate `CapturedError` type from background** — one import, one deletion, 5 minutes.
-3. **MEDIUM — Delete dead `schemas/decode.ts`** — it's unreachable; delete it before it causes confusion.
-4. **HIGH — Fix `%%API_BASE%%` env var split** — `API_URL` vs `APP_URL` is a concrete divergence, not just theoretical.
+1. **Add `mode` to `DecodeRequest` in `shared/types.ts`** — One line, fixes type drift that is actively causing a workaround. Do this first; it unblocks the other fixes.
+
+2. **Move business limit constants into `shared/types.ts`** — `FREE_TIER_CHAR_LIMIT`, `FREE_TIER_DAILY_LIMIT`, `PRO_SONNET_MONTHLY_LIMIT` as exported consts. Then the popup HTML char counter can reference a real value.
+
+3. **Export `ModelName` type from `shared/types.ts`** — Two consumers, one inline union to eliminate.
 
 ### Strategic (medium effort, do when triggered)
 
-5. **MEDIUM — Seed script should import Supabase from lib** — do this the next time the seed script needs to be touched anyway.
+4. **Consolidate the two raw `fetch` decode calls in `sidepanel/index.ts` to use `api.decode()`** — Blocked on fix #1 (mode field in shared type). Once that's done, the raw fetch calls are straightforward to replace. The background script `API_BASE` constant can remain as-is given build isolation.
+
+5. **Extract `renderMarkdown` to `shared/`** — Worth doing when a third UI surface needs AI output rendering or when the copy button UX changes.
 
 ### Future State (high effort, revisit later)
 
-6. **LOW — Normalise `APP_URL`/`API_URL` naming** — low urgency unless adding more deployment targets. Document the distinction in a `.env.example` for now.
+Nothing in this codebase warrants a high-effort architectural consolidation. The shared types package is already the right structural decision and is working well. The API's supabase/stripe/anthropic clients are correctly centralized within the API package. The extension's shared utilities (`api.ts`, `storage.ts`, `sensitive-check.ts`, `modal.ts`, `ui.ts`) are well-factored.
 
 ---
 
 ## What's Already Well-Shared
 
-- **`shared/types.ts`** — correctly used by API routes, extension shared modules, and the web package. The pattern is right; the execution has one gap (the `DecodeResponse` shape).
-- **`packages/api/src/lib/stripe.ts`** — correctly imported by both API routes and `scripts/stripe-setup.ts`. The stripe client is a single instantiation.
-- **`packages/extension/src/shared/api.ts`** — single HTTP client wrapper used by popup, sidepanel, options, and devtools. Clean centralisation of auth header injection.
-- **`packages/extension/src/shared/storage.ts`** — typed `chrome.storage` wrapper used consistently across all extension UIs.
-- **`packages/extension/src/shared/sensitive-check.ts`** — PII detection used in both sidepanel decode and sidepanel inspect paths from one module.
-- **`packages/extension/src/shared/modal.ts`** — confirmation modal used across both sensitive-data paths. Not duplicated.
-- **`errorCodes` constant in `shared/types.ts`** — used in API error responses and extension error handling via the shared type import.
+- **`shared/types.ts`** — API contracts (request/response shapes, error codes, user plans) are correctly shared via a workspace-level package referenced by both API and extension. The `@shared/*` path alias in `tsconfig.base.json` is the right pattern and is working correctly.
+- **`extension/src/shared/api.ts`** — Typed HTTP client with centralized auth header injection. Most surfaces use it correctly (popup, options).
+- **`extension/src/shared/storage.ts`** — Typed `chrome.storage.local` wrapper with `ExtensionStorage` keys — clean, single-responsibility, well-used.
+- **`extension/src/shared/sensitive-check.ts`** — Data sanitization before API calls. Single implementation, used in sidepanel before decoding.
+- **`extension/src/shared/modal.ts`** and **`extension/src/shared/ui.ts`** — Reusable UI primitives (`showConfirmModal`, `copyToClipboard`, `setupResizableGrip`) used across options and sidepanel.
+- **API route structure** — Single Supabase client, single Anthropic client, single Stripe client, each instantiated once and imported by routes. No duplicate connections anywhere in the API package.
+- **The web package** is intentionally thin (static HTML + a dev server) and has no logic worth sharing. Its only API interaction is in `auth.html` and is correctly scoped to auth flow.

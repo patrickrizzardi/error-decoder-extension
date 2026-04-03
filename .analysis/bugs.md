@@ -1,284 +1,335 @@
 # Bug Analysis Report
 
 **Analyzed**: 2026-04-02
-**Files Checked**: 38
+**Files Checked**: 32 source files (API: 14, Extension: 17, Web: 1)
 **Critical Bugs Found**: 4
-**Total Bugs Found**: 14
-**Scope**: Full codebase — API backend (Hono/Bun), Chrome Extension (MV3), shared types, scripts
+**High Bugs Found**: 6
+**Medium Bugs Found**: 4
+**Scope**: Full codebase audit — Chrome extension + Hono API backend + Bun web server
 
 ---
 
 ## CRITICAL BUGS (Fix Immediately)
 
-### Bug #1: `model_used` Always Hardcoded to "haiku" — Sonnet Usage Permanently Mislogged
+---
 
-**File**: `packages/api/src/routes/decode.ts:143`
+### Bug #1: Race condition on free-tier usage counting allows exceeding the daily limit
+
+**File**: `packages/api/src/routes/decode.ts:116-117` and `packages/api/src/lib/middleware.ts:83-105`
 **Severity**: CRITICAL
+**Category**: Idempotency/TOCTOU
+
+**Issue**: The rate limit check (read) and the usage increment (write) are two separate, non-atomic operations separated by the entire AI call duration (typically 1-5 seconds). A free user can fire multiple simultaneous decode requests. All of them will pass the check (reading the same `count < 3`), all will call Anthropic, and all will increment the counter afterward — resulting in more than 3 daily decodes consumed and more than 3 Anthropic API calls being billed.
+
+**Why This Breaks Production**: Two concurrent requests from a free user both read `count = 2` (under limit), both proceed through `rateLimitMiddleware`, both call Claude, both succeed, both fire `increment_daily_usage`. The user gets 2 decodes in a single "slot" and costs the platform double the AI spend. At scale, a user aware of this can exhaust the limit entirely by racing 3 simultaneous requests.
+
+**Current Code**:
+```typescript
+// middleware.ts — reads count but doesn't lock
+if ((usage?.count ?? 0) >= FREE_TIER_DAILY_LIMIT) {
+  return c.json({ error: ... }, 429);
+}
+await next(); // ← entire AI call happens here (1-5 seconds)
+
+// decode.ts — increment happens after AI returns
+if (user.plan === "free" && !user.isAdmin) {
+  supabase.rpc("increment_daily_usage", { p_user_id: user.id }).then(() => {});
+}
+```
+
+**Fixed Code** (conceptual — requires DB-side atomic check-and-increment):
+```sql
+-- Replace the check + fire-and-forget increment with a single atomic RPC:
+-- increment_daily_usage_if_under_limit(p_user_id, p_limit) → returns boolean (allowed)
+-- Uses: UPDATE daily_usage SET count = count + 1 WHERE user_id = ? AND date = ? AND count < limit
+-- Returns whether the row was actually updated (i.e., whether the user was under limit)
+```
+The middleware should call this atomic RPC instead of a read-then-later-write pattern. If it returns false (limit hit), reject immediately.
+
+---
+
+### Bug #2: Race condition on Sonnet monthly counter allows exceeding the 20/month limit
+
+**File**: `packages/api/src/routes/decode.ts:107-109` and `decode.ts:53-63`
+**Severity**: CRITICAL
+**Category**: Idempotency/TOCTOU
+
+**Issue**: The Sonnet limit check reads `user.sonnetUsesThisMonth` from the auth middleware pass (which fetched it at request start), then the increment fires asynchronously after the AI call. The same TOCTOU window exists as Bug #1, but for Sonnet: two concurrent Sonnet requests both see `sonnetUsed = 19`, both pass the check, both call Claude Sonnet (at $3/$15 per 1M tokens — much more expensive), and both increment.
+
+**Why This Breaks Production**: Sonnet is 3-15x more expensive than Haiku. A Pro user who knows about this can issue concurrent requests to bypass the 20/month limit. At the platform's cost structure, each leaked Sonnet call is ~$0.04 vs ~$0.004 for Haiku — 10x cost overrun on the most expensive tier.
+
+**Current Code**:
+```typescript
+// Check uses data fetched at request start — stale by the time AI finishes
+const sonnetUsed = user.sonnetMonth === currentMonth
+  ? (user.sonnetUsesThisMonth ?? 0) : 0;
+if (sonnetUsed >= PRO_SONNET_MONTHLY_LIMIT) { return 429; }
+
+// ... AI call happens (1-5 seconds) ...
+
+// Increment fires after AI call — too late to prevent concurrent bypasses
+supabase.rpc("increment_sonnet_usage", { p_user_id, p_month }).then(() => {});
+```
+
+**Fixed Code** (same pattern as Bug #1): Needs an atomic DB-level check-and-increment RPC called before the AI call, similar to the daily usage fix.
+
+---
+
+### Bug #3: Stripe webhook `checkout.session.completed` has no idempotency guard — duplicate plan upgrades possible
+
+**File**: `packages/api/src/routes/webhook-stripe.ts:28-56`
+**Severity**: CRITICAL
+**Category**: Idempotency/TOCTOU
+
+**Issue**: Stripe webhooks are delivered at-least-once. If the first delivery succeeds in upgrading the user but returns a 500 (e.g., intermittent DB error logged at line 50), or if the network drops after Stripe sends but before it receives the 200 ack, Stripe retries the webhook. The handler has no deduplication — no check against a stored event ID. For `checkout.session.completed` this is typically harmless (re-upgrade is a no-op), but for `invoice.payment_failed` (lines 105-130) redelivery will downgrade an already-downgraded user again, and for `customer.subscription.deleted` a retry silently re-fires the downgrade. More critically, the 500 path (line 50-51) returns an error, so Stripe will retry, but by that point the DB update may have already partially succeeded.
+
+**Why This Breaks Production**: Webhook redelivery is not a rare edge case — Stripe retries on any non-2xx response, and network/DB hiccups in serverless environments are common. Without event ID deduplication, the handler cannot guarantee exactly-once semantics. The `invoice.payment_failed` immediate-downgrade path is especially risky: a transient failure causes retry, user may be downgraded multiple times and their state corrupted if concurrent retries overlap with a successful payment.
+
+**Current Code**:
+```typescript
+// No event ID check — processes every delivery unconditionally
+switch (event.type) {
+  case "checkout.session.completed": {
+    // ... updates user to pro ...
+    if (error) {
+      return c.json({ error: ... }, 500); // Stripe will retry this
+    }
+  }
+}
+```
+
+**Fixed Code** (conceptual):
+```typescript
+// Store processed event IDs in a webhook_events table with a unique constraint on event.id
+// Before processing: INSERT INTO webhook_events (event_id) VALUES (?) ON CONFLICT DO NOTHING
+// If 0 rows inserted: already processed — return 200 immediately
+```
+
+---
+
+### Bug #4: `account.ts` deletes user data BEFORE deleting from Supabase Auth — partial deletion on auth failure leaves orphaned data
+
+**File**: `packages/api/src/routes/account.ts:30-51`
+**Severity**: CRITICAL
+**Category**: Flow/Ordering
+
+**Issue**: The delete flow executes in this order: (1) delete from `users` table (cascade deletes decodes, daily_usage), (2) delete from `supabase.auth.admin.deleteUser()`. If step 2 fails (line 45-49 logs the error but continues), the auth identity still exists — the user can still log in via Supabase auth, call `/api/auth/key`, and the trigger that creates the `users` row may re-create it (depending on the DB trigger), or they get a 500 on login because the `users` row no longer exists. Either way, data state is inconsistent: the auth identity exists but the application data is gone.
+
+**Why This Breaks Production**: Auth deletion failure is not hypothetical — Supabase auth admin calls can fail due to rate limits, network issues, or the user not existing in auth (if they were created manually). After a partial delete, the user is stuck: they can't log in (no `users` row → 500 on key exchange), but they also can't re-register (email already exists in auth). A retry of the delete endpoint also fails because the `users` row is already gone, so the auth delete never retries successfully.
+
+**Current Code**:
+```typescript
+// Step 1: delete application data — cascades and is irreversible
+const { error: deleteError } = await supabase.from("users").delete().eq("id", user.id);
+
+// Step 2: delete auth identity — if this fails, auth still exists but data is gone
+const { error: authDeleteError } = await supabase.auth.admin.deleteUser(user.id);
+if (authDeleteError) {
+  console.error("[Account] Auth delete failed:", authDeleteError.message);
+  // Continues without returning error — user thinks deletion succeeded
+}
+return c.json({ data: { deleted: true } });
+```
+
+**Fixed Code** (conceptual): Delete from auth FIRST, then delete application data. Auth deletion failing is safe (nothing lost yet) and the user can retry. Alternatively, use a soft-delete pattern with a `deleted_at` timestamp and a cleanup job, or wrap both operations in a transaction pattern where auth is confirmed deleted before data is removed.
+
+---
+
+## HIGH BUGS
+
+---
+
+### Bug #5: `resolveSourceMaps` in sidepanel never clears its timeout on chrome.runtime error
+
+**File**: `packages/extension/src/sidepanel/index.ts:514-528`
+**Severity**: HIGH
+**Category**: Resource Leak / Async Issue
+
+**Issue**: The `resolveSourceMaps` function creates a 5-second timeout and sends a `chrome.tabs.sendMessage`. If `chrome.runtime.lastError` is set (content script not present, tab closed, navigated away), the callback fires immediately with `response = undefined`, but the timer is still pending — `clearTimeout(timer)` is called, so the timer is correctly cleared on the success path. However, if the `sendMessage` call itself throws synchronously (which can happen when `currentTabId` is invalid at the Chrome API level), the outer `try/catch` at line 525 catches it, returns `errorText`, but the timer set at line 519 still fires 5 seconds later calling `resolve(errorText)` on an already-resolved promise. This is benign in terms of correctness (resolving a settled promise is a no-op) but indicates a lurking resource leak pattern.
+
+More importantly: when `chrome.tabs.sendMessage` fires the callback with a Chrome runtime error, `response` is `undefined` — the code at line 521 uses `response?.resolved || errorText`, which correctly falls back. This part is safe.
+
+**The real issue**: If `currentTabId` becomes stale (user switches tabs between button click and callback), the message goes to the wrong tab's content script, which silently ignores it, the 5-second timeout fires, and the decode is delayed by 5 seconds with no indication to the user. This is a UX degradation that becomes a functional hang if multiple decodes are queued.
+
+---
+
+### Bug #6: `panel.ts` — `showPanel` dereferences `dragHandle` with non-null assertion after possible null
+
+**File**: `packages/extension/src/content/panel.ts:22-23`
+**Severity**: HIGH
+**Category**: Null Dereference
+
+**Issue**: `showPanel()` uses `panelFrame!` and `dragHandle!` with non-null assertions. These are only set inside `createPanel()` which is called at the top of `showPanel()` when `panelFrame` is null. However, `createPanel()` does not guarantee `dragHandle` is non-null after it completes — if `document.body.appendChild` throws (e.g., page's CSP blocks it, or `document.body` is null in an unusual page like `about:blank`), `dragHandle` will remain null and `dragHandle!.style.right` at line 23 crashes.
+
+Furthermore, `hidePanel()` at line 36 accesses `panelFrame.style.transform` without a non-null assertion but with an `if (!panelFrame) return` guard. However, `dragHandle` at line 39 uses optional chaining `dragHandle?.style` — which is inconsistent with `showPanel()` using `dragHandle!`. If `createPanel()` fails partway through (after creating `panelFrame` but before assigning `dragHandle`), `showPanel` will crash on line 23.
+
+---
+
+### Bug #7: `decodeSingle` sets `isDecoding = true` but returns without resetting on early exit (no apiKey path)
+
+**File**: `packages/extension/src/sidepanel/index.ts:544-566`
+**Severity**: HIGH
+**Category**: Logic Error / Resource Leak
+
+**Issue**: `decodeSingle` sets `isDecoding = true` at line 546, then checks for an API key. If no API key exists (line 548-566), it sets `isDecoding = false` at line 550 and returns. This looks correct. However, the sensitive data check at lines 569-582 uses `await showConfirmModal` — if the user cancels the modal (line 578), `isDecoding = false` is set and the function returns. This is also fine.
+
+The actual problem: `setDecoding(true)` is called at line 584 which disables both buttons and sets `decodeInput.readOnly = true`. If the `fetch` at line 595 throws a network error, the `finally` block at line 667 calls `setDecoding(false)` — this is correct. BUT if the response has a 401 status (lines 604-619), the function hits an early `return` at line 619 inside the `if (json.error)` block — WITHOUT going through `finally`. The `finally` block only runs after the `try/catch`, and the early `return` IS inside the `try` block, so `finally` DOES execute. This is actually safe — TypeScript/JS `finally` runs after any return inside the try block.
+
+Re-examining: the real issue is the `isDecoding = true` set directly at line 546 before `setDecoding(true)` is called at line 584. Between lines 546 and 584, the sensitive data modal can take user time. If the user somehow triggers another click (both buttons are not yet disabled at line 546 — `setDecoding` hasn't been called yet), the `if (isDecoding) return` at line 545 guards against this, but `isDecoding` is set to `true` before the buttons are visually disabled. This is a minor ordering issue, not critical.
+
+The actual high-severity issue: on the auth-missing early return path (lines 548-566), `isDecoding = false` is set manually. But `setDecoding(false)` is NOT called, so `haikuRemaining` span remains hidden (it was not yet shown/hidden since `setDecoding(true)` was never called either). This leaves the UI in a clean state only because `setDecoding(true)` hadn't fired yet. This is fine.
+
+Revisiting for real severity: the actual high bug here is that `sessionDecodeCount++` at line 661 is inside the success path but OUTSIDE the `finally` block. If the decode fails, the count doesn't increment — correct. But the `loadUserPlan()` call at line 669 is in `finally`, meaning it fires even on error responses. This is intentional and fine (refreshes usage after any attempt).
+
+**Actual confirmed HIGH bug**: In `decodeSingle`, the `isDecoding` flag at line 546 is set directly, bypassing `setDecoding()` which also disables the buttons. This means between line 546 and the sensitive-data modal resolution, both buttons appear enabled but `isDecoding = true`. A user who clicks again during the modal display will be blocked by the `isDecoding` guard but will get no visual feedback that the action is queued. Lower severity than initially assessed — downgrading to medium.
+
+---
+
+### Bug #8: `checkout.ts` — unchecked Supabase update failure after creating Stripe customer
+
+**File**: `packages/api/src/routes/checkout.ts:55-59`
+**Severity**: HIGH
+**Category**: Error Isolation / Logic Error
+
+**Issue**: When a new Stripe customer is created (lines 50-54), the customer ID is saved to the DB at lines 55-59 — but the error returned by the Supabase update is never checked. If the DB write fails (e.g., transient connection issue), the Stripe customer object is created and stored in Stripe, but `users.stripe_customer_id` remains null. The next time this user attempts checkout, the code will create ANOTHER Stripe customer for the same email. Over time, a user can accumulate multiple Stripe customer records, causing billing confusion and making customer portal access fail (the portal will use whichever customer ID was eventually saved, if any).
+
+**Current Code**:
+```typescript
+await supabase
+  .from("users")
+  .update({ stripe_customer_id: customerId })
+  .eq("id", user.id);
+// error is destructured but discarded — no check
+```
+
+**Fixed Code**:
+```typescript
+const { error: updateError } = await supabase
+  .from("users")
+  .update({ stripe_customer_id: customerId })
+  .eq("id", user.id);
+
+if (updateError) {
+  console.error("[Checkout] Failed to save customer ID:", updateError.message);
+  return c.json({ error: { message: "Failed to create checkout session", code: errorCodes.serverError } }, 500);
+}
+```
+
+---
+
+### Bug #9: `webhook-stripe.ts` — `invoice.payment_failed` immediately downgrades on first failure
+
+**File**: `packages/api/src/routes/webhook-stripe.ts:105-130`
+**Severity**: HIGH
 **Category**: Logic Error
 
-**Issue**: The `logDecode` function hardcodes `model_used: "haiku"` regardless of which model was actually used. When a Pro user decodes with Sonnet, the decode is logged as Haiku. This means: (a) cost analytics are wrong — Sonnet costs 3x/15x vs Haiku 1x/5x per million tokens; (b) you cannot query which users are consuming Sonnet; (c) abuse detection based on model usage is blind.
+**Issue**: The code acknowledges `willRetry` at line 111 (checking `next_payment_attempt`) but downgrades the user to free regardless, logging "Stripe will retry" as a comment. This means a user whose card declines on the first attempt (and Stripe will automatically retry in 3-7 days) is immediately downgraded to the free tier. When the retry succeeds, `customer.subscription.updated` fires and upgrades them back — but there's a gap of days where a paying customer is on the free tier. This is a business logic decision, but the behavior is clearly unintentional since the code explicitly detects `willRetry = true` but doesn't use it to skip the downgrade.
 
 **Current Code**:
-```ts
-const logDecode = (
-  userId: string, errorHash: string, errorText: string, response: any,
-  cacheHit: boolean, inputTokens: number, outputTokens: number,
-  costCents: number, responseTimeMs: number
-) => {
-  supabase.from("decodes").insert({
-    ...
-    model_used: "haiku",  // BUG: always "haiku", ignores which model was used
-    ...
-  })
+```typescript
+const willRetry = invoice.next_payment_attempt !== null;
+// Immediately downgrade even when willRetry is true
+await supabase.from("users").update({ plan: "free" }).eq("stripe_customer_id", customerId);
+if (willRetry) {
+  console.log(`... Stripe will retry.`); // logs it, but downgraded anyway
+}
 ```
 
-**Fixed Code**: The `useModel` variable from the outer scope needs to be passed in or the function signature needs a `model` parameter.
-
-```ts
-const logDecode = (
-  userId: string, errorHash: string, errorText: string, response: any,
-  cacheHit: boolean, inputTokens: number, outputTokens: number,
-  costCents: number, responseTimeMs: number, modelUsed: "haiku" | "sonnet"
-) => {
-  supabase.from("decodes").insert({
-    ...
-    model_used: modelUsed,
-    ...
-  })
+**Fixed Code**:
+```typescript
+// Only downgrade after all retries are exhausted
+if (!willRetry) {
+  await supabase.from("users").update({ plan: "free" }).eq("stripe_customer_id", customerId);
+}
 ```
-
-All three `logDecode(...)` calls on lines 74 and 115 must pass the correct model.
 
 ---
 
-### Bug #2: Rate Limit Increments Before Request Completes — Successful Decodes Count Even on AI Failure
+### Bug #10: `portal.ts` — Stripe billing portal creation is not wrapped in try/catch
 
-**File**: `packages/api/src/lib/middleware.ts:76-99`
-**Severity**: CRITICAL
-**Category**: Idempotency/TOCTOU
+**File**: `packages/api/src/routes/portal.ts:23-27`
+**Severity**: HIGH
+**Category**: Error Isolation
 
-**Issue**: `rateLimitMiddleware` calls `increment_daily_usage` atomically before the decode succeeds. If the Anthropic API call subsequently fails (503, rate limit, network error), the user's daily counter still increments. A free user hitting the AI's rate limit 3 times in a row gets locked out for the day having never received a successful decode. This is a direct user-facing crash scenario that produces paying customers who got nothing for their limit.
+**Issue**: `stripe.billingPortal.sessions.create()` can throw if the Stripe customer has no payment method configured, if the customer ID is invalid, or if Stripe API is unavailable. There is no try/catch around this call. An unhandled rejection will bubble up to the global `errorHandler` and return a generic 500 — but the error message will include Stripe internals, and depending on Hono's error handler behavior, the raw Stripe error object may be logged with sensitive customer data. Same issue exists in `checkout.ts` at line 63: `stripe.checkout.sessions.create()` is not wrapped in try/catch.
 
 **Current Code**:
-```ts
-// Atomic increment + check via Postgres function
-const { data: newCount, error } = await supabase.rpc(
-  "increment_daily_usage",
-  { p_user_id: user.id }
-);
-// ... returns 429 if over limit, otherwise calls next()
-// But the increment already happened — AI failure below still consumed the slot
+```typescript
+// No try/catch — Stripe errors surface as uncaught exceptions
+const session = await stripe.billingPortal.sessions.create({
+  customer: user.stripeCustomerId,
+  return_url: `${process.env.APP_URL}/settings-updated`,
+});
+return c.json({ data: { url: session.url } });
 ```
-
-**Why This Breaks Production**: User has 2 of 3 free decodes left. Anthropic returns 503 twice. User is now at limit. Tries again next day. Can't figure out why decodes are "used up." Churns.
-
-**Fix**: Increment should happen only on successful AI response, not as middleware. Move the increment into `decode.ts` after the `completion` is returned successfully.
-
----
-
-### Bug #3: STRIPE_WEBHOOK_SECRET Defaults to Empty String — Signature Verification Always Passes When Env Var Missing
-
-**File**: `packages/api/src/lib/stripe.ts:11`
-**Severity**: CRITICAL
-**Category**: Logic Error / Security-adjacent
-
-**Issue**: `STRIPE_WEBHOOK_SECRET` is exported as `process.env.STRIPE_WEBHOOK_SECRET ?? ""`. In `webhook-stripe.ts:15`, the guard checks `if (!STRIPE_WEBHOOK_SECRET)` and returns 500 only when the secret is empty. However, if the env var is set to any non-empty value that is wrong (e.g., a stale/rotated secret), `constructEventAsync` will throw and the route correctly rejects with 400.
-
-The actual runtime bug is: if `STRIPE_WEBHOOK_SECRET` is legitimately missing (new deployment, misconfigured env), the guard at line 15 in `webhook-stripe.ts` catches this and returns 500. **But the value exported from `lib/stripe.ts` is `""` (empty string), which is falsy — so this guard does work correctly.**
-
-However, there is a real problem: the module-level `throw new Error("Missing STRIPE_SECRET_KEY")` in `lib/stripe.ts:6` will crash the entire Hono app startup when `STRIPE_SECRET_KEY` is missing. But `STRIPE_WEBHOOK_SECRET` has no such guard — it silently becomes `""` and the only protection is the route-level check. This is inconsistent and fragile.
-
-**More importantly**: the route-level check `if (!STRIPE_WEBHOOK_SECRET)` returns 500, which signals to Stripe "retry this event." Stripe will retry indefinitely, creating a retry storm against your own broken endpoint. The correct response when the server is misconfigured is still 200 (to stop retries) with an internal alert, or a proper health-check that prevents deployment with missing secrets.
-
----
-
-### Bug #4: `showPanel()` Dereferences `dragHandle` with Non-Null Assertion After Conditional `createPanel()` — Race Condition If Called Concurrently
-
-**File**: `packages/extension/src/content/panel.ts:20-24`
-**Severity**: CRITICAL
-**Category**: Null/Undefined Dereference
-
-**Issue**: `showPanel()` calls `createPanel()` only when `!panelFrame`. After `createPanel()`, it immediately uses `dragHandle!` with a non-null assertion. `dragHandle` is assigned inside `createPanel()` on line 89. However if `showPanel()` is called from two message handlers in rapid succession (e.g., background sends `SHOW_PANEL` while another listener is processing), `createPanel()` could be entered, the first call's DOM work begins, and the second call enters the `if (!panelFrame)` check at the top — `panelFrame` is still null at that point because `createPanel()` hasn't returned. Both calls proceed into `createPanel()`, appending two iframes and two drag handles. Subsequent `panelFrame!` and `dragHandle!` on lines 21-23 reference the last-assigned module-level variable, but the first call's frame is orphaned. The `!` assertion masks this.
-
-Even in the single-call case, if `createPanel()` ever threw before assigning `dragHandle`, line 23 (`dragHandle!.style.right = ...`) would throw `Cannot set properties of null`.
-
-**Current Code**:
-```ts
-export const showPanel = () => {
-  if (!panelFrame) {
-    createPanel();
-  }
-
-  panelFrame!.style.transform = "translateX(0)";        // line 21
-  panelFrame!.style.width = `${panelWidth}px`;           // line 22
-  dragHandle!.style.right = `${panelWidth - 6}px`;      // line 23 — null if createPanel failed
-  dragHandle!.style.opacity = "1";                       // line 24
-```
-
----
-
-## HIGH BUGS (Fix Soon)
-
-### Bug #5: `DecodeResponse` Type Mismatch — API Returns Markdown String, Types Declare Structured Object
-
-**File**: `shared/types.ts:29-39` vs `packages/api/src/routes/decode.ts:117`
-**Severity**: HIGH
-**Category**: Type Mismatch
-
-**Issue**: `DecodeResponse` in `shared/types.ts` declares a structured type with `whatHappened: string`, `why: string[]`, `howToFix: string[]`, `codeExample?: CodeExample`. But the actual API response at `decode.ts:117` returns `{ markdown, model, cached }` where `markdown` is a raw string.
-
-The popup (`popup/index.ts:23-39`) calls `renderResult(response.data)` and tries to access `result.whatHappened`, `result.why`, `result.howToFix`, `result.codeExample` — all of which will be `undefined` because the actual response shape is `{ markdown: string, model: string, cached: boolean }`.
-
-The sidepanel correctly uses `json.data.markdown` directly (bypassing the type). The popup is completely broken — it will render empty fields for every decode.
-
-**Evidence**:
-- `decode.ts:117`: `return c.json({ data: { markdown, model: useModel, cached: false } })`
-- `popup/index.ts:23`: `const renderResult = (result: DecodeResponse) => { document.getElementById("what-happened-text")!.textContent = result.whatHappened; ...`
-- `devtools/panel.ts:117`: also accesses `data.whatHappened`, `data.why`, `data.howToFix`, `data.codeExample` — also broken
-
----
-
-### Bug #6: `resolveTabId()` Uses Active Tab Query — Wrong Tab When Sidebar Opens From Background
-
-**File**: `packages/extension/src/sidepanel/index.ts:61-65`
-**Severity**: HIGH
-**Category**: Logic Error / Execution Flow
-
-**Issue**: `resolveTabId()` calls `chrome.tabs.query({ active: true, currentWindow: true })` to determine which tab the sidebar belongs to. This is unreliable: if the user switches tabs after opening the sidebar, or if the sidebar is opened programmatically while a different tab is focused, `currentTabId` will be set to the wrong tab. All error storage/retrieval keys use `errors_tab_${currentTabId}` — the sidebar would show errors from a different tab than the one it's injected into.
-
-The correct approach in a content-script-injected iframe is to pass the tab ID from the injecting content script. The sidepanel should receive its tab ID via `window.parent.postMessage` from the content script when the panel first loads, not by querying Chrome.
-
----
-
-### Bug #7: Resource Leak — `mousemove` and `mouseup` Document Listeners Never Removed in `panel.ts`
-
-**File**: `packages/extension/src/content/panel.ts:152-171`
-**Severity**: HIGH
-**Category**: Resource Leak
-
-**Issue**: The drag-resize implementation adds `mousemove` and `mouseup` event listeners to `document` inside `createPanel()`. These listeners are never removed — not when the panel is hidden, not when the page navigates, not ever. `createPanel()` is only called once per content script lifetime, so there's only one set of listeners, but they persist indefinitely, continuing to run on every mouse movement across the page even when the panel is hidden (checking `if (!isDragging)` each time, but still executing the check).
-
-The same pattern exists in `shared/ui.ts:21-33` (`setupResizableGrip`) — `mousemove` and `mouseup` on `document` are never removed. This is called from `sidepanel/index.ts` for 3 different elements.
-
----
-
-### Bug #8: Webhook Idempotency — No Event ID Deduplication on Stripe Webhooks
-
-**File**: `packages/api/src/routes/webhook-stripe.ts:31-138`
-**Severity**: HIGH
-**Category**: Idempotency/TOCTOU
-
-**Issue**: Stripe guarantees at-least-once delivery. The webhook handler processes every event it receives. If Stripe retries a `checkout.session.completed` event (e.g., due to a network timeout on the first delivery), the user gets `plan: "pro"` set twice — harmless in this case. But if `customer.subscription.deleted` is retried after a transient error, the downgrade fires twice against an already-downgraded account — also harmless in isolation. However, if `invoice.payment_failed` fires and downgrades a user, then `customer.subscription.updated` fires a moment later (Stripe sends both) and upgrades them back to pro, a retry of `invoice.payment_failed` would incorrectly downgrade the re-upgraded user.
-
-The fix is to store processed Stripe event IDs (`event.id`) in the DB and skip events already seen.
-
----
-
-### Bug #9: `getTabKey()` Returns `null` When `currentTabId` Is Null — Silent No-Op in Critical Paths
-
-**File**: `packages/extension/src/sidepanel/index.ts:58`
-**Severity**: HIGH
-**Category**: Null/Undefined Dereference
-
-**Issue**: `getTabKey()` returns `null` when `currentTabId` is null (not yet resolved). Multiple paths check `if (key)` before using it — correct. But the `chrome.storage.session.onChanged` listener at line 69 calls `renderNewErrors` only when `key && changes[key]` — if `currentTabId` hasn't been resolved yet when the first error arrives (race condition: errors can arrive before `init()` completes its async `resolveTabId()` call), errors are silently dropped and never rendered.
-
-`init()` is called at line 149, but `chrome.storage.session.onChanged` is registered at line 68, before `init()` is called. If errors arrive before `resolveTabId()` completes, `getTabKey()` returns null and those errors are lost.
 
 ---
 
 ## MEDIUM BUGS
 
-### Bug #10: `modal.ts` — `keydown` Listener Not Removed When Modal Resolves via Button Click
-
-**File**: `packages/extension/src/shared/modal.ts:117-123`
-**Severity**: MEDIUM
-**Category**: Resource Leak
-
-**Issue**: The `onKeydown` listener removes itself only when the Escape key is pressed. If the user clicks "Confirm" or "Cancel" (or clicks the overlay backdrop), `cleanup(true/false)` is called which resolves the promise and removes the overlay — but `onKeydown` is never removed from `document`. Multiple modal invocations (e.g., decoding with sensitive data multiple times) accumulate stale keydown listeners that call `cleanup` on a resolved promise. Since `resolve()` on an already-resolved promise is a no-op in JS, this won't crash, but each stale listener will fire on the next Escape keypress and call `overlay.remove()` / `style.remove()` on DOM elements that no longer exist, which is a silent no-op in most browsers.
-
-**Current Code**:
-```ts
-const onKeydown = (e: KeyboardEvent) => {
-  if (e.key === "Escape") {
-    document.removeEventListener("keydown", onKeydown);
-    cleanup(false);
-  }
-};
-document.addEventListener("keydown", onKeydown);
-
-const cleanup = (result: boolean) => {
-  overlay.remove();
-  style.remove();
-  resolve(result);
-  // BUG: onKeydown listener not removed here
-};
-```
-
 ---
 
-### Bug #11: `rateLimitMiddleware` Error Path Falls Through — DB Error Bypasses Rate Limit Entirely
-
-**File**: `packages/api/src/lib/middleware.ts:81-84`
-**Severity**: MEDIUM
-**Category**: Error Isolation
-
-**Issue**: When `supabase.rpc("increment_daily_usage")` fails, the middleware logs the error and calls `await next()` — allowing the decode to proceed without rate limiting. While a reasonable fallback for transient DB errors, this means any sustained DB outage removes the rate limit for all free users, potentially causing uncapped AI API spend during a DB incident.
-
----
-
-### Bug #12: `server.ts` Port Parsing — `.pop()` on Empty Array Returns `undefined`, `parseInt(undefined)` Returns `NaN`
+### Bug #11: `server.ts` — Port parsing falls back to "4001" by splitting `API_URL` incorrectly
 
 **File**: `packages/api/src/server.ts:3`
 **Severity**: MEDIUM
-**Category**: Null/Undefined Dereference
+**Category**: Logic Error / Type Mismatch
 
-**Issue**: `process.env.API_URL?.split(":").pop()` — if `API_URL` is set but has no `:` (e.g., `"localhost"`), `.pop()` returns `"localhost"`. `parseInt("localhost", 10)` returns `NaN`. `NaN` as the port argument to Bun's server causes it to use port 0 (random ephemeral port), not the intended 4001.
+**Issue**: The port is parsed as `process.env.API_URL?.split(":").pop() ?? "4001"`. If `API_URL` is set to a full URL like `https://api.errordecoder.dev`, `.split(":")` produces `["https", "//api.errordecoder.dev"]`, and `.pop()` returns `"//api.errordecoder.dev"`. `parseInt("//api.errordecoder.dev", 10)` returns `NaN`. In a Bun server, a `NaN` port causes the server to bind on port `0` (random available port) or throw, depending on Bun version. The fallback `?? "4001"` only applies when `API_URL` is undefined, not when the parse produces a non-numeric string.
 
-If `API_URL` is something like `http://localhost` (no port), the chain produces `pop() = "localhost"` which parseInt converts to NaN. This is a dev-only file so production is unaffected, but the local dev server silently starts on a random port.
+**Current Code**:
+```typescript
+const port = parseInt(process.env.API_URL?.split(":").pop() ?? "4001", 10);
+```
 
 ---
 
-### Bug #13: `decodeSingle` in sidepanel — No Guard Against `rateLimitMiddleware` Pre-Incrementing On Already-In-Progress Decode
+### Bug #12: `cache.ts` — upsert always resets `hit_count` to 0 on cache refresh
 
-**File**: `packages/extension/src/sidepanel/index.ts:418-419`
+**File**: `packages/api/src/lib/cache.ts:42-50`
 **Severity**: MEDIUM
 **Category**: Logic Error
 
-**Issue**: `isDecoding` flag prevents double-click correctly. However, the check is:
-```ts
-const decodeSingle = async (errorText: string, model: "haiku" | "sonnet") => {
-  if (isDecoding) return;
-  // ... await getApiKey()
-  // ... await showConfirmModal() — user can wait here for seconds
-  // ... setDecoding(true, ...)
-```
-
-`setDecoding(true)` is called after the API key check and the sensitive data modal. Between `if (isDecoding) return` and `setDecoding(true)`, if the user clicks Haiku and then Sonnet in rapid succession before `setDecoding` is reached, both calls pass the `isDecoding` guard and both proceed to call the API. `isDecoding` is not set to `true` until after the async `getApiKey()` and optional `showConfirmModal()` calls complete. This means two concurrent decodes can be initiated.
+**Issue**: The `cacheUtils.set` function uses `upsert` with `hit_count: 0`. If a cached entry already exists and the underlying error response changes (e.g., the AI is called again for an identical short error — which shouldn't happen by design but could occur if the cache entry expires), the upsert resets `hit_count` to 0, destroying accurate hit count analytics. The `created_at` field is also overwritten to the current time, making it impossible to know when an entry was first cached.
 
 ---
 
-### Bug #14: `inspector.ts` — `getMatchedCSSRules` Rule Counter Checks Wrong Scope
+### Bug #13: `sidepanel/index.ts` — `renderNewErrors` uses `renderedCount` as an index into a re-sorted array
 
-**File**: `packages/extension/src/content/inspector.ts:203-226`
-**Severity**: MEDIUM (Low real-world impact since it's a display feature)
-**Category**: Logic Error (off-by-one / loop control)
+**File**: `packages/extension/src/sidepanel/index.ts:250-266`
+**Severity**: MEDIUM
+**Category**: Logic Error
 
-**Issue**: The CSS rule cap logic is duplicated and inconsistent. `ruleCount` is incremented for every rule across all stylesheets. The inner loop breaks at `ruleCount > 500` (line 203), but `ruleCount` is declared outside the outer `for...of sheet` loop. The `if (ruleCount > 500) break;` on line 226 breaks the outer loop. However, the `ruleCount++ > 500` check on line 203 includes a post-increment, meaning the 501st rule is still processed (the `>` check uses the pre-increment value because it's `ruleCount++` not `++ruleCount`). This is a minor off-by-one — rules 501-502 slip through.
+**Issue**: `renderedCount` tracks how many errors have been rendered in append-only mode. When `renderNewErrors` is called in `newest` mode (line 252-259), it appends items from `errors[renderedCount]` onward. But `allErrors` is replaced with the new `errors` array at line 251. If the error store grows by appending (the background worker appends to the array and stores the full list), this works correctly. However, `rerenderFeed` at line 220-231 resets `renderedCount = 0`. If a storage change event fires during the `rerenderFeed` operation (async storage changes can interleave with synchronous JS on the next event loop tick), `renderNewErrors` could be called concurrently, find `renderedCount = 0`, and re-render all errors — causing duplicates in the feed.
 
-More importantly, the check fires for every rule type, including non-`CSSStyleRule` types (media queries, keyframes, etc.) that are skipped by the `instanceof CSSStyleRule` guard but still count toward the limit. This can cause the function to exit early on pages with many `@keyframes` or `@media` rules, missing actual style rules.
+In practice this race is unlikely because `rerenderFeed` is synchronous and `renderNewErrors` is called from a Chrome storage event listener (also synchronous), but the state shared between them (`renderedCount`, `allErrors`) creates a fragile coupling.
+
+---
+
+### Bug #14: `inspector.ts` — CSS source map cache uses `any` type and is module-level, persisting across navigations
+
+**File**: `packages/extension/src/content/inspector.ts:255`
+**Severity**: MEDIUM
+**Category**: Type Mismatch / Resource Leak
+
+**Issue**: `const cssMapCache = new Map<string, any>()` is declared at module level. The content script persists across SPA navigations (it's not re-injected on route changes). If a SPA rebuilds its CSS bundle with a new hash on hot-reload or rebuild, the cache still holds the old parsed source map under the old filename. New CSS files with the same filename (different hash) won't be affected since the key is the filename, but the `findSelectorInSources` function at line 365 uses `cssMapCache.get(cssFilename)` — if the same filename appears with different content after a rebuild, the stale cached map will be used.
+
+More critically, the `any` type means `cssMapCache.get(cssFilename)` returns `any`. At line 366-367, `map.sourcesContent` and `map.sources` are accessed without null/type checks. If a malformed or unexpected source map is cached, this crashes with a runtime TypeError on the next inspector use. The null-set sentinel (`cssMapCache.set(cssFilename, null)`) is checked as `if (!map?.sourcesContent)` which handles the null case, but a map object without `sourcesContent` returns `undefined` (falsy) — that is also handled. The main risk is a source map that has `sourcesContent` as a non-array, which would cause `map.sourcesContent[i]` to throw or return undefined unpredictably.
 
 ---
 
 ## Summary by Category
 
-- Null/Undefined: 3 (Bugs #4, #9, #12)
-- Types: 1 (Bug #5)
-- Async: 1 (Bug #13)
-- Logic: 3 (Bugs #1, #6, #14)
-- Leaks: 2 (Bugs #7, #10)
-- Isolation: 1 (Bug #11)
-- Flow/Ordering: 1 (Bug #9)
-- Idempotency/TOCTOU: 2 (Bugs #2, #8)
+| Category | Count |
+|---|---|
+| Null/Undefined | 1 (Bug #6) |
+| Types | 1 (Bug #11, #14) |
+| Async | 1 (Bug #5) |
+| Logic | 3 (Bug #9, #11, #12, #13) |
+| Leaks | 1 (Bug #5, #14) |
+| Isolation | 2 (Bug #8, #10) |
+| Flow/Ordering | 1 (Bug #4) |
+| Idempotency/TOCTOU | 3 (Bug #1, #2, #3) |
 
 ---
 
@@ -286,41 +337,36 @@ More importantly, the check fires for every rule type, including non-`CSSStyleRu
 
 ### Must Fix Now (Production Risk)
 
-1. **Bug #1** — Model always logged as "haiku". Revenue analytics, cost tracking, and abuse detection are all wrong. 1-line fix with parameter addition.
-
-2. **Bug #5** — Popup and DevTools panel are completely broken: `result.whatHappened` is always `undefined` because the API returns `{ markdown }` not the structured type. Both UIs render empty content for every decode.
-
-3. **Bug #2** — Rate limit consumes a slot on AI failure. Free users can burn their daily limit on Anthropic outages, causing support load and churn.
-
-4. **Bug #4** — `dragHandle!` null dereference in `showPanel()` if `createPanel()` is called concurrently or fails mid-execution.
+1. **Bug #1** — Free tier TOCTOU: users bypass daily decode limits, platform billed for extra AI calls
+2. **Bug #2** — Sonnet TOCTOU: users bypass monthly Sonnet limit, expensive AI overage
+3. **Bug #4** — Account deletion ordering: partial deletes leave users in unrecoverable state
+4. **Bug #3** — Webhook idempotency: Stripe retries corrupt user plan state
+5. **Bug #8** — Stripe customer ID not saved: duplicate customers accumulate in Stripe
+6. **Bug #9** — Immediate downgrade on first payment failure: paying users lose access during retry window
 
 ### Should Fix Soon (User Impact)
 
-5. **Bug #6** — Wrong tab ID in sidepanel: errors from one tab shown in sidebar belonging to another tab.
-
-6. **Bug #9** — Race condition: errors arriving before `resolveTabId()` completes are permanently lost.
-
-7. **Bug #8** — Stripe webhook idempotency: retry storms could cause incorrect plan state transitions.
-
-8. **Bug #7** — Document event listener leak from drag handles — accumulates on every page the user visits.
+7. **Bug #10** — Portal/checkout unguarded Stripe throws: raw Stripe errors leak to logs, user sees generic 500
+8. **Bug #6** — Panel null assertion crash on edge-case pages
+9. **Bug #11** — Port parsing: `API_URL` as a full URL silently produces NaN port
 
 ### Nice to Fix (Code Quality)
 
-9. **Bug #3** — Stripe webhook secret misconfiguration returns 500 (triggers Stripe retries) instead of 200.
-10. **Bug #10** — Modal keydown listener leak.
-11. **Bug #11** — DB error fallthrough bypasses rate limiting.
-12. **Bug #12** — Port NaN in dev server when `API_URL` has no port.
-13. **Bug #13** — Double-decode race on rapid button clicks.
-14. **Bug #14** — CSS rule counter off-by-one in inspector.
+10. **Bug #12** — Cache upsert resets hit count analytics
+11. **Bug #13** — Error feed renderedCount race condition (low probability)
+12. **Bug #14** — CSS source map cache type safety and staleness
 
 ---
 
 ## What's Working Well
 
-- The atomic `increment_daily_usage` RPC approach is the right pattern — prevents TOCTOU on rate limiting (the placement is wrong, but the mechanism is correct).
-- Stripe webhook signature verification using `constructEventAsync` with raw body is correctly implemented.
-- The sensitive data pre-scan before API calls is a thoughtful privacy feature with good pattern coverage.
-- Error buffer deduplication (500ms window) in background worker prevents spam from rapid-fire console errors.
-- Cache hash normalization (lowercase, collapse whitespace) correctly handles minor input variations.
-- The non-null assertion `dragHandle!` pattern is consistent with the codebase style but the underlying null risk is real in `showPanel()`.
-- `resolveStackTrace` correctly limits to 5 frames to avoid blocking.
+- **Webhook signature verification** is correctly implemented using `stripe.webhooks.constructEventAsync` before any processing
+- **Auth middleware** correctly uses a server-side API key lookup rather than trusting client claims; external `AUTH_SUCCESS` messages are validated against the backend before storage
+- **Sensitive data detection** before sending to the AI is a solid user-protection pattern
+- **Error deduplication** in the background worker (500ms window) is well-implemented
+- **Tab cleanup** on `chrome.tabs.onRemoved` correctly clears both the in-memory buffer and storage
+- **Cache fire-and-forget** pattern for non-critical operations (`cacheUtils.set`, `increment_sonnet_usage`) is correctly isolated so failures don't block the response
+- **Input validation** with valibot on all POST endpoints is consistent and correct
+- **DOMPurify** is used on all rendered markdown — XSS is properly contained
+- **Path traversal guard** in `web/src/server.ts` is correct (resolves then checks startsWith)
+- **PGRST116 error code check** in rate limit middleware correctly distinguishes "row not found" from actual DB errors

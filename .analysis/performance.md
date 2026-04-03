@@ -1,275 +1,340 @@
 # Performance Analysis Report
 
 **Analyzed**: 2026-04-02
-**Scope**: Full codebase — API backend (Hono/Bun/Vercel), Chrome Extension (MV3), shared types
-**Issues Found**: 12 (Critical: 1, High: 5, Medium: 5, Low: 1)
+**Scope**: Full codebase — `packages/api/src/` (routes, lib), `packages/extension/src/` (background, content scripts, sidepanel, shared), `packages/web/src/`
+**Issues Found**: 13 (Critical: 2, High: 5, Medium: 6)
 
 ---
 
-## [CRITICAL] — Triple sequential DB round-trips on every decode request
+## [CRITICAL] — Two sequential DB round-trips on every authenticated API request
 
-**Location**: `packages/api/src/routes/decode.ts:22-77` + `packages/api/src/lib/middleware.ts:21-63`
+**Location**: `packages/api/src/lib/middleware.ts:25–108`
 **Category**: N+1 Query / Blocking
-**Current Complexity**: 3 serial DB round-trips per request before the AI call
-**Should be**: 1 DB round-trip (or 2 at most, with parallelism)
 
-**Issue**: Every call to `POST /api/decode` executes three sequential Supabase round-trips before the AI call starts:
+**Issue**: Every request to `/decode`, `/usage`, `/feedback`, `/checkout`, `/portal`, and `/account` runs `authMiddleware` then `rateLimitMiddleware` back-to-back. That is two sequential Supabase (Postgres over the internet) queries before the handler runs:
 
-1. `authMiddleware` — `SELECT id, email, plan, ... FROM users WHERE api_key = ?` (middleware.ts:38)
-2. `rateLimitMiddleware` — `supabase.rpc("increment_daily_usage", ...)` (middleware.ts:76)
-3. Sonnet limit check — `SELECT sonnet_uses_this_month, sonnet_month FROM users WHERE id = ?` (decode.ts:52)
+1. `authMiddleware`: `SELECT id, email, plan, stripe_customer_id, is_admin, sonnet_uses_this_month, sonnet_month FROM users WHERE api_key = ?`
+2. `rateLimitMiddleware` (free users): `SELECT count FROM daily_usage WHERE user_id = ? AND date = ?`
 
-Steps 1 and 3 hit the `users` table twice for the same user. The `authMiddleware` already fetches the user row but deliberately selects only `id, email, plan, stripe_customer_id, is_admin` — the sonnet fields are excluded. So decode.ts re-queries for `sonnet_uses_this_month` and `sonnet_month` separately.
+These are sequential because `rateLimitMiddleware` is registered as a separate middleware and only runs after `authMiddleware` completes. The `daily_usage` query is also already available for free — it could be joined into the first query, or the usage count could be embedded in the users row, eliminating the second round-trip entirely.
 
-**Real-World Impact**: At Supabase's typical 5-15ms per query over HTTPS, this adds 15-45ms of serialized DB latency before the AI call even starts. With 500 users at peak, every single decode request pays this overhead. The fix is to add the sonnet columns to the `authMiddleware` select and pass them through context, eliminating the third query entirely. The rate limit RPC call must remain separate (it's an atomic increment), but the auth + sonnet queries can be merged.
+**Real-World Impact**: At 100–200 ms per Supabase round-trip (Vercel edge → Supabase), every decode request pays 200–400 ms in middleware overhead before any AI work starts. For a tool whose main value proposition is speed, this is a meaningful degradation. At scale it also doubles database connection pressure.
 
 **Current Code**:
-```ts
-// middleware.ts — fetches user WITHOUT sonnet fields
-const { data: user } = await supabase
-  .from("users")
-  .select("id, email, plan, stripe_customer_id, is_admin")
-  .eq("api_key", apiKey)
-  .single();
-
-// decode.ts — re-fetches the SAME user row for sonnet fields
-const { data: userRow } = await supabase
-  .from("users")
-  .select("sonnet_uses_this_month, sonnet_month")
-  .eq("id", user.id)
-  .single();
+```typescript
+// middleware.ts — two separate queries, run sequentially via middleware chain
+// Query 1 (authMiddleware):
+const { data: user } = await supabase.from("users").select("...").eq("api_key", apiKey).single();
+// Query 2 (rateLimitMiddleware, separate middleware):
+const { data: usage } = await supabase.from("daily_usage").select("count").eq("user_id", ...).eq("date", today).single();
 ```
 
-**Optimized Solution**: Add `sonnet_uses_this_month, sonnet_month` to the `authMiddleware` select. Extend `AuthUser` to carry those fields. The decode route reads them from `c.get("user")` directly.
+**Optimized Solution**: Combine into a single query using a Postgres join or RPC. The users row is the source of truth; daily usage can be stored as a denormalized column (`daily_decode_count`, `daily_decode_date`) on users, updated atomically by the same `increment_daily_usage` RPC. One query replaces two.
 
-**Performance Gain**: Eliminates 1 full DB round-trip (5-15ms) on every sonnet-eligible decode request. At 500 decodes/day that's 2.5-7.5 seconds of cumulative latency saved daily with no code complexity increase.
+**Performance Gain**: Eliminates one network round-trip per request — 100–200 ms reduction in P50 latency for free-tier users, which is the majority of traffic.
 
 ---
 
-## [HIGH] — `GET /api/usage` makes two sequential DB queries that could be parallel
+## [CRITICAL] — `stripe.prices.list` called on every checkout request — no caching
 
-**Location**: `packages/api/src/routes/usage.ts:8-47`
-**Category**: Blocking / Parallelism
-**Current Complexity**: 2 serial awaits
-**Should be**: 2 parallel awaits via `Promise.all`
+**Location**: `packages/api/src/routes/checkout.ts:27–44`
+**Category**: Blocking / False Optimization
 
-**Issue**: The usage endpoint executes two `await supabase.from(...)` calls back-to-back. These are completely independent reads against different tables (`daily_usage` and `users`). There is no reason they run sequentially.
+**Issue**: Every call to `POST /checkout` makes a live Stripe API call to list all active prices, then does an in-memory `Array.find()` over the result. Stripe prices don't change unless you explicitly edit them. Calling `stripe.prices.list()` on every checkout request means:
+
+- An extra external HTTP call to Stripe on the critical path where the user is actively trying to pay.
+- If Stripe has elevated latency or a brief outage, checkout fails entirely.
+- The price IDs are static configuration — they never change between requests.
+
+**Real-World Impact**: Stripe API P99 latency can reach 500–1000 ms. This adds that latency to every checkout attempt. Stripe rate limits are also per-account; high-volume checkout traffic wastes quota.
 
 **Current Code**:
-```ts
-const { data: usage } = await supabase
-  .from("daily_usage")
-  .select("count")
-  .eq("user_id", user.id)
-  .eq("date", today)
-  .single();
-
-const { data: userRow } = await supabase
-  .from("users")
-  .select("sonnet_uses_this_month, sonnet_month")
-  .eq("id", user.id)
-  .single();
+```typescript
+// Called fresh on every POST /checkout
+const prices = await stripe.prices.list({ active: true, limit: 10, expand: ["data.product"] });
+const price = prices.data.find(p => p.metadata.app === "error-decoder" && p.metadata.interval === interval);
 ```
 
-**Optimized Solution**:
-```ts
-const [{ data: usage }, { data: userRow }] = await Promise.all([
-  supabase.from("daily_usage").select("count").eq("user_id", user.id).eq("date", today).single(),
-  supabase.from("users").select("sonnet_uses_this_month, sonnet_month").eq("id", user.id).single(),
-]);
-```
+**Optimized Solution**: Cache the price IDs at module load time (process start). Since this is serverless, cache them in a module-level variable on cold start. A simple `const priceCache = { month: "price_xxx", year: "price_yyy" }` populated once via an init call, or hardcoded after the `stripe:setup` script runs and IDs are known. Price IDs are stable across the lifetime of the product.
 
-**Performance Gain**: Cuts the `/api/usage` response time roughly in half for the DB portion. The sidebar calls this on every decode and on page load. At 10ms per query, serial = 20ms minimum DB wait; parallel = 10ms.
+**Performance Gain**: Eliminates one Stripe API call (100–500 ms) from the checkout critical path. Reduces checkout failure surface during Stripe slowdowns.
 
 ---
 
-## [HIGH] — `logDecode` always hardcodes `model_used: "haiku"` regardless of actual model
+## [HIGH] — `detectTechStack()` called twice per `GET_PAGE_CONTEXT` message — module cache bypassed on first call
 
-**Location**: `packages/api/src/routes/decode.ts:130-149`
-**Category**: Algorithm (data correctness with performance implication)
+**Location**: `packages/extension/src/content/index.ts:44–52`, `packages/extension/src/content/tech-detect.ts:18–381`
+**Category**: Algorithm / Blocking
 
-**Issue**: The `logDecode` function hardcodes `model_used: "haiku"` on line 143 regardless of which model was actually used. This is not a performance issue in the traditional sense, but it means cost analytics queries against the `decodes` table will always undercount Sonnet costs, potentially causing the operator to miss abuse patterns or cost overruns. The `useModel` variable is available in scope but not passed to `logDecode`.
+**Issue**: The content script calls `detectTechStack()` in two places:
+
+1. In `runTechDetection()` after page load (1500 ms delay) — result is cached in `cachedTech`.
+2. In the `GET_PAGE_CONTEXT` message handler — called synchronously again.
+
+The `GET_PAGE_CONTEXT` handler runs on demand. If it fires before the 1500 ms delayed `runTechDetection()` completes (which is likely for fast decode flows), `cachedTech` is `null` and the full detection scan runs inline on the message handler. This is the expensive path.
+
+`detectTechStack()` itself does:
+- Multiple `document.querySelector()` calls (40+ selectors)
+- `Array.from(document.querySelectorAll("script[src]"))` — iterates all script elements
+- `Array.from(document.querySelectorAll("link[href]"))` — iterates all link elements
+- String concatenation of all src/href values
+- 80+ `String.includes()` checks on the concatenated string
+
+On a page with 50 script tags and 20 link tags, this is non-trivial DOM work running synchronously in a content script on every user-triggered decode.
+
+**Real-World Impact**: On script-heavy pages (React SPA with 20+ chunks, analytics-heavy marketing sites), this adds tens of milliseconds of synchronous DOM work blocking the decode flow. Content scripts share the renderer's main thread.
 
 **Current Code**:
-```ts
-const logDecode = (
-  userId: string, errorHash: string, errorText: string, response: any,
-  cacheHit: boolean, inputTokens: number, outputTokens: number,
-  costCents: number, responseTimeMs: number
-) => {
-  supabase.from("decodes").insert({
-    // ...
-    model_used: "haiku",  // <-- always "haiku", even for Sonnet calls
+```typescript
+// content/index.ts:44 — GET_PAGE_CONTEXT handler, no cache check
+if (message.type === "GET_PAGE_CONTEXT") {
+  const tech = detectTechStack(); // Full scan if cache is cold
+  sendResponse({ url: ..., domain: ..., tech, isDev: ... });
+}
 ```
 
-**Real-World Impact**: Silent misattribution of all Sonnet decodes to Haiku in the analytics table. The cost_cents calculation is correct (it uses the real rates), but the `model_used` column is wrong for every Sonnet call. Operators relying on `GROUP BY model_used` to audit costs will see incorrect data.
+**Optimized Solution**: Eagerly populate the cache at `document_idle` (which is when the content script already runs), not behind a 1500 ms timer. The timer exists to wait for main-world globals, but the `GET_PAGE_CONTEXT` handler should return the cached result from the initial detection, not re-run the scan.
+
+**Performance Gain**: Eliminates redundant O(n) DOM scan on the decode hot path; saves 10–50 ms of synchronous renderer work on script-heavy pages.
 
 ---
 
-## [HIGH] — `checkSensitiveData` runs 27 independent regex passes per call, called in hot decode path
+## [HIGH] — `checkSensitiveData()` runs 27 regexes sequentially on every decode — no short-circuit
 
-**Location**: `packages/extension/src/shared/sensitive-check.ts:49-62`
+**Location**: `packages/extension/src/shared/sensitive-check.ts:49–62`
 **Category**: Algorithm
-**Current Complexity**: O(27 * n) where n = text length — 27 sequential `.match()` calls
-**Should be**: Acceptable for the use case, but there is a flag: this is called on every decode, including large (up to 15,000 char) inputs.
 
-**Issue**: `checkSensitiveData` iterates through an array of 27 regex patterns and calls `text.match(regex)` on the full input for each one. None of the regexes are anchored or have early-exit opportunities. On a 15,000 character input (the maximum allowed), this is 27 full string scans.
+**Issue**: `checkSensitiveData()` is called before every decode and every inspect query. It runs 27 regex patterns against the input string sequentially, with no early exit. Most inputs are benign (no secrets) so all 27 regexes always run to completion. Some patterns are complex (`aws.{0,10}secret.{0,10}[=:]\s*["']?[A-Za-z0-9/+=]{40}`) and use unbounded quantifiers.
 
-This is called synchronously in the extension's main thread before every decode request (`sidepanel/index.ts:441-450`, `sidepanel/index.ts:641-651`). Because this is in an extension popup/sidepanel context (single-threaded JS), it blocks the UI thread while scanning.
+For the common case of a 500-character stack trace with no secrets, the function runs 27 `String.match()` calls and collects zero results. This happens synchronously before every API call.
 
-**Real-World Impact**: For a typical 500-char stack trace this is negligible (< 1ms). For a 15,000-char input, 27 regex scans can take 5-20ms synchronously, creating a noticeable UI freeze during the "Resolving source maps..." phase. Low-severity for typical use but worth noting for the max input size.
-
-**Performance Gain**: Combining all patterns into a single `RegExp` with named groups (`(?<aws_key>AKIA[A-Z0-9]{16})|(?<stripe>...)...`) reduces 27 passes to 1, cutting scan time by ~26x for large inputs. The JS engine can then short-circuit after the first match per group.
-
----
-
-## [HIGH] — `panel.ts` registers `mousemove` and `mouseup` listeners on `document` permanently during drag and never removes them
-
-**Location**: `packages/extension/src/content/panel.ts:152-170`
-**Category**: Memory Leak / Content Script Performance
-
-**Issue**: Inside `createPanel()`, two event listeners are added to `document` — `mousemove` and `mouseup` — for drag-to-resize functionality. These listeners are added once and **never removed**, even when the panel is hidden or when `isDragging` is false. They fire on every mouse event on the host page forever.
-
-```ts
-// These are added once and never cleaned up
-document.addEventListener("mousemove", (e) => {
-  if (!isDragging) return;  // early exit when not dragging, but listener always fires
-  // ...
-});
-
-document.addEventListener("mouseup", () => {
-  if (!isDragging) return;
-  // ...
-});
+**Current Code**:
+```typescript
+for (const { type, regex } of patterns) {
+  const match = text.match(regex); // No early exit, all 27 run
+  if (match && !seen.has(type)) { ... }
+}
 ```
 
-The `mousemove` handler fires on every pixel of mouse movement across the entire host page for the lifetime of the tab. The handler has a `if (!isDragging) return` guard, so it's cheap per call, but it still invokes a function and does a boolean check on every `mousemove` event. On pages with their own heavy `mousemove` handlers, this creates listener stacking.
+**Real-World Impact**: Minor for short inputs, but for Pro users sending 15,000-character error logs, complex regex backtracking on long strings can take 1–5 ms per pattern. 27 patterns × worst case = potentially 50–100 ms of synchronous blocking in the extension popup before the API call even starts.
 
-The same issue exists in `packages/extension/src/shared/ui.ts:21-32` (`setupResizableGrip`), where `mousemove` and `mouseup` are added to `document` and never cleaned up. This function is called three times for three different grips in `sidepanel/index.ts:17-25`, so there are 3 permanent document-level `mousemove` listeners in the sidepanel iframe.
+**Optimized Solution**: For inputs under ~200 characters (the common case for simple errors), skip the full scan after a quick `includes()` check for known key prefixes (`AKIA`, `sk-`, `ghp_`, `Bearer`, `password=`). Only run the full 27-pattern scan when at least one prefix is present.
 
-**Real-World Impact**: Continuous event listener overhead on the host page for the duration of the session. Minor per call, but the content script runs on every page the user visits. On mouse-intensive pages (design tools, maps, games), these listeners fire thousands of times per second.
-
----
-
-## [HIGH] — `getMatchedCSSRules` in inspector iterates all stylesheet rules synchronously on click, O(N * M) where N = rules, M = elements
-
-**Location**: `packages/extension/src/content/inspector.ts:185-234`
-**Category**: Algorithm / Blocking DOM Operation
-**Current Complexity**: O(N) CSS rules traversal with O(M) `el.matches()` calls per rule, capped at 500
-**Should be**: Capped is fine — but the synchronous blocking nature on the main thread is the concern
-
-**Issue**: When a user clicks an element, `getElementInfo` is called synchronously, which calls `getMatchedCSSRules`. This iterates up to 500 CSS rules across all stylesheets and calls `el.matches(rule.selectorText)` for each. `el.matches()` triggers selector matching in the browser engine — not a trivial operation for complex selectors.
-
-Additionally, `window.getComputedStyle(el)` is called (line 133), which forces a style recalculation. Then `el.getBoundingClientRect()` is called (line 134), which forces a layout flush. These two calls together on an element in a heavy page cause a forced synchronous layout (style + layout reflow), which can be expensive on complex documents.
-
-**Real-World Impact**: On a page using Material UI or Ant Design (thousands of CSS rules), the 500-rule cap may still mean 500 selector matches + a forced layout reflow happening synchronously on the main thread at click time. On a slow device this could produce a 50-200ms freeze on the host page. The cap at 500 was clearly added to mitigate this (good), but the reflow is still unavoidable.
+**Performance Gain**: For ~80% of inputs (short stack traces without credentials), reduces sensitive check from 27 regex executions to ~6 fast `includes()` checks — roughly 10x faster in the common case.
 
 ---
 
-## [MEDIUM] — `detectTechStack` makes ~30 `document.querySelector` calls on every invocation — not memoized on SPA navigations that do `pushState`
+## [HIGH] — `getMatchedCSSRules()` iterates all stylesheets and rules on every element click — O(S×R) with hard cap but no index
 
-**Location**: `packages/extension/src/content/tech-detect.ts:18-381`
-**Category**: Algorithm / Content Script Performance
+**Location**: `packages/extension/src/content/inspector.ts:185–235`
+**Category**: Algorithm
 
-**Issue**: `detectTechStack` makes approximately 30+ `document.querySelector` calls, 2 `Array.from(document.querySelectorAll(...))` calls for script/link URLs (assembled into large concatenated strings), and reads/parses a JSON DOM attribute. The result is cached in `cachedTech` — but the cache is only invalidated on `popstate` and `hashchange` events (lines 15-16), not on `pushState`-based navigation (which is how React Router, Vue Router, Next.js, etc. navigate).
+**Issue**: `getMatchedCSSRules()` is called on every element click during inspector mode. It iterates over every loaded stylesheet, and within each stylesheet iterates over every CSS rule, calling `el.matches(rule.selectorText)` for each. `el.matches()` is a full selector engine call per rule — not a hash lookup.
 
-This means on a React/Next.js SPA, the cache never invalidates naturally and `detectTechStack` returns stale data after any client-side navigation that doesn't trigger `popstate`. The first call is the expensive one (30+ queries), but subsequent calls are cached. The real issue is the cache invalidation gap.
+The cap is 500 total rules. On MUI or Ant Design pages, stylesheets can have thousands of rules. The cap prevents a complete runaway but still allows up to 500 `el.matches()` calls in the worst case. This is all synchronous DOM work on click.
 
-Also, `detectTechStack` is called a second time synchronously inside the `GET_PAGE_CONTEXT` message handler (`content/index.ts:46`) — bypassing the cache only if `cachedTech` happens to be null. If a `GET_PAGE_CONTEXT` message arrives before tech detection runs, it triggers the full expensive scan inline in the message handler.
-
-**Real-World Impact**: 30+ DOM queries is fast (< 2ms on most pages), but it happens on every page load (delayed 1500ms in `index.ts:22`), every `GET_PAGE_CONTEXT` message, and on `popstate`. The issue is not performance cost per call but correctness of cached results after SPA navigation that uses `history.pushState`.
-
----
-
-## [MEDIUM] — `resolveCSSSourceMaps` in inspector fetches CSS source maps sequentially rather than in parallel
-
-**Location**: `packages/extension/src/content/inspector.ts:257-291`
-**Category**: Blocking / Parallelism
-
-**Issue**: The CSS source map resolution loop fetches maps for each unique stylesheet URL sequentially:
-
-```ts
-for (const sheetFile of sheetUrls) {
-  try {
-    const sources = await getCSSSourceFiles(sheetFile);  // sequential fetch
-    // ...
+**Current Code**:
+```typescript
+for (const sheet of document.styleSheets) {
+  for (const rule of rules) {
+    if (ruleCount++ > 500) break;
+    if (rule instanceof CSSStyleRule) {
+      if (el.matches(rule.selectorText)) { ... } // Full selector match per rule
+    }
   }
 }
 ```
 
-On a page with 3 bundled stylesheets, this fires 3 serial fetches (each potentially downloading a large .map file) when they could all run concurrently with `Promise.all`.
+**Real-World Impact**: On a React/MUI app with 3–5 stylesheets and hundreds of rules, this is 300–500 synchronous `el.matches()` calls. Each call forces style recalculation. On a low-powered laptop this can cause a perceptible 50–200 ms freeze on click.
 
-**Real-World Impact**: If each map fetch takes 50ms (small CDN file), 3 sheets = 150ms serial vs ~50ms parallel. The 3-second timeout in the click handler (`inspector.ts:107`) means the user experiences a 3s wait before the basic element info is shown. Parallel fetching would help responsiveness under that timeout.
-
----
-
-## [MEDIUM] — `sourcemap.ts` decodes VLQ mappings sequentially for each frame with `decodedCache` scoped to content script — works correctly but cold start decodes are CPU-bound and block main thread
-
-**Location**: `packages/extension/src/content/sourcemap.ts:241-278`
-**Category**: Algorithm / Blocking DOM
-
-**Issue**: `decodeMappings` is a synchronous, CPU-bound operation. For a large webpack bundle, the `mappings` field in a source map can be several megabytes of VLQ-encoded data. The function decodes it with a nested loop: outer loop over `;`-separated lines, inner loop over `,`-separated segments, with bitwise VLQ decoding per segment. This runs synchronously on the content script's main thread.
-
-The `decodedCache` (line 27) correctly caches the decoded result per URL, so only the first call per URL pays this cost. However, the first call for a large bundle (e.g., a Next.js app with a 2MB+ `_app.js.map`) will block the main thread for potentially 100-500ms during the decode step.
-
-**Real-World Impact**: Users on large production apps may notice a brief freeze during the first source map resolution. Subsequent resolves are instant (cache hit). The 5-second timeout in the sidepanel (`sidepanel/index.ts:394`) means the UI won't hang indefinitely, but the freeze is real on the first call.
-
-**Note**: Moving this to a Web Worker would fully solve the issue but requires architectural changes. Escalating this specific sub-point if worker threads are considered.
+**Performance Gain**: The cap prevents the worst case, but reducing it to 100–150 rules and returning earlier would cut worst-case time by 3–5x without meaningfully degrading match quality.
 
 ---
 
-## [MEDIUM] — `panel.ts` registers a `message` event listener on `window` inside `createPanel()` — listener is never removed and fires on every `postMessage` to the host page
+## [HIGH] — `resolveSourceMaps()` resolves stack frames sequentially — async I/O that could be parallel
 
-**Location**: `packages/extension/src/content/panel.ts:176-180`
-**Category**: Memory Leak / Content Script Performance
+**Location**: `packages/extension/src/content/sourcemap.ts:49–53`
+**Category**: False Optimization
 
-**Issue**: Inside `createPanel()`:
+**Issue**: Stack frames are resolved one at a time in a `for` loop, even though each frame involves independent network fetches (fetch the JS bundle, fetch the `.map` file). Up to 5 frames are resolved. If each frame's source map isn't cached, that is up to 10 sequential network fetches.
 
-```ts
-window.addEventListener("message", (event) => {
-  if (event.data?.type === "ERRORDECODER_CLOSE") {
-    hidePanel();
-  }
+**Current Code**:
+```typescript
+// Sequential — each frame waits for the previous
+for (const frame of frames.slice(0, 5)) {
+  const result = await resolveFrame(frame.url, frame.line, frame.col);
+  resolved.push({ frame, resolved: result });
+}
+```
+
+**Real-World Impact**: With 5 unique script URLs and no cache, this is 5 sequential pairs of fetch calls. At 50–100 ms per fetch, that is 500–1000 ms of added latency before the decode API call. The sidepanel already has a 5-second timeout on this operation, so in the worst case the user waits the full 5 seconds.
+
+**Optimized Solution**: Use `Promise.all()` for the frame resolution — all 5 frames can be resolved concurrently since they are independent. The map cache is already correct for deduplication of repeated URLs.
+
+**Performance Gain**: Reduces worst-case source map resolution from ~1000 ms (5 frames × 200 ms) to ~200 ms (all 5 in parallel). For stack traces with repeated script URLs (common in bundled apps), cache hits keep this near zero anyway.
+
+---
+
+## [HIGH] — `logDecode()` is awaited on the critical path — blocks response for a non-critical DB write
+
+**Location**: `packages/api/src/routes/decode.ts:113`
+**Category**: Blocking
+
+**Issue**: After the AI response is received, `logDecode()` is awaited before the response is sent to the user. This inserts a full Supabase `INSERT` round-trip (100–200 ms) into the user-facing latency. The decode ID returned by `logDecode()` is used to enable feedback buttons, but feedback is optional and best-effort.
+
+**Current Code**:
+```typescript
+// Awaited — user waits for DB insert before seeing their AI response
+const decodeId = await logDecode(user.id, errorHash, errorText, markdown, useModel, false, inputTokens, outputTokens, costCents, responseTimeMs);
+return c.json({ data: { markdown, model: useModel, cached: false, decodeId } });
+```
+
+**Real-World Impact**: Users wait an extra 100–200 ms on every non-cached decode for a DB insert that has no bearing on the AI result they are waiting for. At AI latency of 1–3 seconds, this is a 5–15% increase in perceived response time.
+
+**Optimized Solution**: Fire the log write async (fire-and-forget) and generate the `decodeId` client-side using a UUID, or generate the UUID server-side before the insert and return it immediately. The insert can then run after the response is sent.
+
+```typescript
+const decodeId = crypto.randomUUID();
+logDecode(decodeId, user.id, ...).catch(() => {}); // fire-and-forget
+return c.json({ data: { markdown, model: useModel, cached: false, decodeId } });
+```
+
+**Performance Gain**: Removes 100–200 ms from every non-cached decode response. This is pure latency saved with zero trade-off — feedback is already best-effort.
+
+---
+
+## [MEDIUM] — `usageRoute` queries `users` table redundantly — data already fetched by `authMiddleware`
+
+**Location**: `packages/api/src/routes/usage.ts:13–16`
+**Category**: N+1 Query
+
+**Issue**: `GET /usage` runs `authMiddleware`, which fetches `sonnet_uses_this_month` and `sonnet_month` from the `users` table. Then the usage handler immediately queries `users` again for those same two columns (`sonnet_uses_this_month`, `sonnet_month`). The user object is already attached to the context by `authMiddleware`.
+
+**Current Code**:
+```typescript
+// authMiddleware already fetched sonnet_uses_this_month, sonnet_month into c.get("user")
+// But usage route queries users again:
+const [{ data: usage }, { data: userRow }] = await Promise.all([
+  supabase.from("daily_usage").select("count").eq("user_id", user.id).eq("date", today).single(),
+  supabase.from("users").select("sonnet_uses_this_month, sonnet_month").eq("id", user.id).single(), // redundant
+]);
+```
+
+**Real-World Impact**: Every `/usage` call (fired on sidepanel load and after every decode) makes two parallel Supabase queries when it could make one. The second is wasted work — `user.sonnetUsesThisMonth` and `user.sonnetMonth` are already on the context.
+
+**Optimized Solution**: Remove the `users` re-query. Read `user.sonnetUsesThisMonth` and `user.sonnetMonth` from `c.get("user")` which `authMiddleware` already populated.
+
+**Performance Gain**: Eliminates one DB query per `/usage` call. `/usage` is called once on sidebar open and once after every decode — meaningful cumulative savings.
+
+---
+
+## [MEDIUM] — History `loadHistory()` called twice on every decode — double storage read
+
+**Location**: `packages/extension/src/sidepanel/index.ts:657–658`, `packages/extension/src/sidepanel/history.ts:20–25`
+**Category**: Algorithm
+
+**Issue**: After a successful decode, the code calls `saveToHistory(entry)` and then immediately calls `populateHistoryDropdown()`. `saveToHistory()` calls `loadHistory()` internally to prepend the new entry, and `populateHistoryDropdown()` also calls `loadHistory()` to repopulate the UI. This is two sequential `chrome.storage.session.get()` calls for the same key.
+
+**Current Code**:
+```typescript
+await saveToHistory(entry);      // internally calls loadHistory() → storage read
+await populateHistoryDropdown(); // internally calls loadHistory() → second storage read
+```
+
+**Real-World Impact**: `chrome.storage` is async IPC to the browser process. Two sequential calls add 2–10 ms of unnecessary latency after every decode. Minor but unnecessary.
+
+**Optimized Solution**: `saveToHistory()` could return the updated history array. `populateHistoryDropdown()` could accept an optional pre-loaded history array, skipping the re-read.
+
+---
+
+## [MEDIUM] — `renderErrorItem()` calls `errorFeed.scrollTop = errorFeed.scrollHeight` on every item — forced layout per item
+
+**Location**: `packages/extension/src/sidepanel/index.ts:316`
+**Category**: DOM Manipulation
+
+**Issue**: Inside `renderErrorItem()`, which is called in a loop for every error in `renderNewErrors()`, the code reads `errorFeed.scrollHeight` (which forces a layout/reflow) and then sets `scrollTop`. This runs once per error item rendered. If 50 errors arrive at once (the max buffer size), this is 50 forced reflows in a loop.
+
+**Current Code**:
+```typescript
+const renderErrorItem = (err: CapturedError, index: number) => {
+  // ... build and append item ...
+  errorFeed.scrollTop = errorFeed.scrollHeight; // forced layout on every item
+};
+```
+
+**Real-World Impact**: Reading `scrollHeight` after a DOM mutation forces the browser to flush pending layout. In a loop of 50, this is 50 sequential layout flushes. The initial load of a full error buffer (50 items) could stutter visibly in the sidepanel.
+
+**Optimized Solution**: Scroll once after the loop completes, not inside the loop. Move the scroll call to `renderNewErrors()` after all items are appended.
+
+---
+
+## [MEDIUM] — `populateHistoryDropdown()` rebuilds the entire `<select>` innerHTML on every decode
+
+**Location**: `packages/extension/src/sidepanel/index.ts:738–758`
+**Category**: DOM Manipulation
+
+**Issue**: `populateHistoryDropdown()` is called after every decode. It sets `select.innerHTML = ""` (wiping and re-parsing), then appends up to 10 `<option>` elements. The full DOM subtree is destroyed and rebuilt each time, even though only one new entry was added (the newest decode).
+
+**Current Code**:
+```typescript
+select.innerHTML = `<option value="">Recent decodes...</option>`; // destroy + parse
+history.forEach((entry) => {
+  const option = document.createElement("option");
+  // ... build option ...
+  select.appendChild(option);
 });
 ```
 
-This listener is added once on `createPanel()` and never removed. It fires on every `window.postMessage` sent to the page — including messages from other iframes, analytics SDKs, Intercom, Stripe.js, etc. Pages with heavy use of `postMessage` (OAuth flows, payment iframes, chat widgets) will trigger this listener frequently.
+**Real-World Impact**: Minor for a 10-item list, but it causes unnecessary style recalculations and DOM garbage collection on every decode. In a session with frequent decoding this compounds.
 
-**Real-World Impact**: Low overhead per call (single property check), but it's an unnecessary permanent listener that compounds with the `mousemove` listeners described above.
+**Optimized Solution**: Prepend a single new `<option>` at position 1 (after the placeholder) and remove the last option if `history.length >= MAX_ENTRIES`. No full rebuild needed.
 
 ---
 
-## [MEDIUM] — `checkout.ts` fetches ALL Stripe prices on every checkout initiation — no caching
+## [MEDIUM] — `detectGlobals()` runs twice at page load — once immediately, once after 1000 ms
 
-**Location**: `packages/api/src/routes/checkout.ts:27-44`
-**Category**: Blocking / Missing Cache
+**Location**: `packages/extension/src/capture/main-world.ts:174–180`
+**Category**: Algorithm
 
-**Issue**: Every call to `POST /api/checkout` fetches the full price list from Stripe:
+**Issue**: The main-world capture script calls `detectGlobals()` twice:
 
-```ts
-const prices = await stripe.prices.list({
-  active: true,
-  limit: 10,
-  expand: ["data.product"],
-});
+1. Immediately (if `readyState !== "loading"`) or on `DOMContentLoaded`.
+2. Again after a `setTimeout(detectGlobals, 1000)`.
+
+The 1000 ms delay is to catch late-initializing frameworks (React, Vue, etc.). But if the page is already loaded when the script runs, `detectGlobals()` executes immediately AND then again after 1 second. The second run overwrites the same DOM attribute. This is harmless but wasteful — it runs the full global inspection loop twice and serializes + sets a DOM attribute twice.
+
+**Current Code**:
+```typescript
+setTimeout(detectGlobals, 1000);           // run 1 — always
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", detectGlobals); // run 2a — only if loading
+} else {
+  detectGlobals(); // run 2b — immediately if already loaded, so TWO runs always happen
+}
 ```
 
-This is an external HTTP call to Stripe's API on every checkout attempt. The product/price configuration changes very rarely (only when `stripe:setup` is re-run). Fetching this live on every checkout adds ~150-300ms of Stripe API latency to the checkout flow and creates a dependency: if Stripe's API has elevated latency, checkout is slower.
-
-**Real-World Impact**: At the current scale this is fine — checkout is not a hot path. However, the price IDs are static configuration that never changes at runtime. They should be stored in environment variables at setup time and read directly, eliminating the Stripe API call entirely from the checkout path.
+**Real-World Impact**: Low. The double execution is fast. But it does mean the DOM attribute is set twice and the global inspection code (30+ property accesses) runs twice on already-loaded pages.
 
 ---
 
-## [LOW] — `relay.ts` sends a `chrome.runtime.sendMessage` for every console error/warning without any throttling or batching at the relay level
+## [MEDIUM] — `new Date().toISOString()` called twice in `decode.ts` for Sonnet month check
 
-**Location**: `packages/extension/src/content/relay.ts:8-16`
-**Category**: Content Script Performance
+**Location**: `packages/api/src/routes/decode.ts:54, 108`
+**Category**: Algorithm
 
-**Issue**: The relay sends a `chrome.runtime.sendMessage` for every `errordecoder-error` CustomEvent synchronously. On pages with noisy console output (e.g., React development mode warnings, verbose analytics SDKs), this can mean hundreds of `sendMessage` calls per second.
+**Issue**: `new Date().toISOString().slice(0, 7)` is computed at line 54 (for the Sonnet limit check) and again at line 108 (for the `increment_sonnet_usage` RPC call). These are two separate `Date` constructor + `toISOString()` calls that could cross a month boundary between them (practically impossible but indicative of the pattern). More importantly, it is redundant computation.
 
-The background worker (`background/index.ts`) does deduplicate at 500ms windows (line 176) and batch-flushes to storage with a 100ms debounce (line 163-167). However, the overhead of `chrome.runtime.sendMessage` itself — which involves IPC to the service worker — exists for every event before the background dedup runs.
+**Current Code**:
+```typescript
+// Line 54
+const currentMonth = new Date().toISOString().slice(0, 7);
+// ... 50 lines later...
+// Line 108
+const currentMonth = new Date().toISOString().slice(0, 7); // recomputed
+supabase.rpc("increment_sonnet_usage", { p_user_id: user.id, p_month: currentMonth })
+```
 
-**Real-World Impact**: On a React dev-mode page with console warnings from every render, this can generate 5-50 `sendMessage` calls/second. Chrome's extension IPC is not free. A 50ms debounce at the relay level (batching multiple errors into one `sendMessage`) would reduce IPC calls by ~50-100x on noisy pages with negligible impact on error capture latency.
+**Real-World Impact**: Trivially minor. Flagged for completeness — this is the definition of redundant computation, even if the cost is nanoseconds.
 
 ---
 
@@ -277,12 +342,12 @@ The background worker (`background/index.ts`) does deduplicate at 500ms windows 
 
 | Category | Count |
 |---|---|
-| N+1 Queries | 1 |
-| Blocking / Parallelism | 4 |
-| Algorithm | 3 |
-| Memory Leak (Content Script) | 2 |
-| Missing Cache | 1 |
-| Data Correctness | 1 |
+| N+1 queries | 2 |
+| Algorithms | 4 |
+| Blocking | 3 |
+| False optimizations | 1 |
+| DOM manipulation | 2 |
+| Redundant computation | 1 |
 
 ---
 
@@ -290,33 +355,36 @@ The background worker (`background/index.ts`) does deduplicate at 500ms windows 
 
 ### Fix Now (Production Risk)
 
-1. **Triple sequential DB round-trips on decode** (`decode.ts` + `middleware.ts`) — adds 15-45ms to every decode request. Fix by merging the auth + sonnet field queries.
-2. **`logDecode` hardcodes `model_used: "haiku"`** — silently corrupts analytics data for all Sonnet calls. Easy one-line fix.
-3. **Sequential DB queries in `/usage`** — easy `Promise.all` conversion, cuts response time in half.
+1. **Sequential DB queries in middleware** (`middleware.ts`) — every request pays 200–400 ms in DB overhead before the AI call. Most impactful latency issue in the system.
+2. **`logDecode()` awaited on critical path** (`decode.ts:113`) — blocks AI response delivery for a non-critical DB write. Easy fix, immediate UX improvement.
+3. **Stripe `prices.list` on every checkout** (`checkout.ts:27`) — synchronous external API call on the payment critical path with no caching.
 
 ### Fix Soon (User Impact)
 
-4. **Permanent `mousemove` listeners on document** in `panel.ts` and `ui.ts` — causes continuous overhead on every page the extension is active on. Convert to add-on-mousedown / remove-on-mouseup pattern.
-5. **`getMatchedCSSRules` forced layout reflow** in `inspector.ts` — unavoidable but the `getComputedStyle` + `getBoundingClientRect` sequence forces style + layout on the host page. Consider batching reads before writes.
-6. **`resolveCSSSourceMaps` sequential fetches** — convert inner loop to `Promise.all(Array.from(sheetUrls).map(...))`.
+4. **Sequential source map frame resolution** (`sourcemap.ts:49`) — easy `Promise.all()` swap, cuts worst-case source map resolution from ~1s to ~200ms.
+5. **`detectTechStack()` double-scan on `GET_PAGE_CONTEXT`** (`content/index.ts:44`) — redundant DOM scan on every decode if the cache hasn't been populated yet.
+6. **`usageRoute` re-queries `users` table** (`usage.ts:15`) — auth middleware already fetched this data; second query is pure waste.
+7. **`checkSensitiveData()` no short-circuit** (`sensitive-check.ts:49`) — runs all 27 regexes on every decode including clean inputs.
 
 ### Nice to Have (Optimization)
 
-7. **`checkSensitiveData` single-pass regex** — combine 27 patterns into one alternation regex for large inputs.
-8. **`detectTechStack` `pushState` cache invalidation** — add `history.pushState` monkey-patch to clear `cachedTech` on SPA navigations.
-9. **`relay.ts` batching** — debounce `sendMessage` by 50ms to reduce IPC on noisy pages.
-10. **`checkout.ts` price lookup** — store price IDs in env vars at setup time instead of fetching from Stripe on every checkout.
-11. **`panel.ts` `message` listener** — remove it on `hidePanel`, re-add on `showPanel`.
+8. **`renderErrorItem()` scroll forced layout in loop** (`sidepanel/index.ts:316`) — move scroll call outside the render loop.
+9. **`populateHistoryDropdown()` full DOM rebuild** (`sidepanel/index.ts:738`) — prepend one option instead of rebuilding.
+10. **`detectGlobals()` double execution** (`main-world.ts:174`) — minor, runs twice on already-loaded pages.
+11. **History `loadHistory()` double storage read** (`history.ts` / `sidepanel/index.ts:657`) — one extra async IPC call per decode.
+12. **`getMatchedCSSRules()` cap at 500 rules** (`inspector.ts:203`) — cap is appropriate but could be tighter.
+13. **Redundant `currentMonth` computation** (`decode.ts:54,108`) — trivial, extract to a variable.
 
 ---
 
 ## What's Already Performant
 
-- **Background error buffer with debounced flush** (`background/index.ts:156-182`): The 100ms debounce for storage writes and per-tab 50-error cap are well-designed. Prevents storage thrashing on noisy pages.
-- **Inspector `requestAnimationFrame` for overlay positioning** (`inspector.ts:66-78`): Correctly batches overlay position updates inside rAF, avoiding layout thrashing on every `mousemove`.
-- **Source map caching** (`sourcemap.ts:23-26`, `inspector.ts:254`): Both in-memory Maps prevent redundant network fetches and expensive VLQ decoding after the first call.
-- **Response cache with `isCacheable` heuristic** (`cache.ts`): The length + file-path heuristic is lightweight and correctly avoids caching unique stack traces. The fire-and-forget `increment_cache_hit` RPC is correct — no need to await a counter increment.
-- **Sonnet counter update as fire-and-forget** (`decode.ts:111`): The Sonnet RPC increment is correctly non-blocking — the user doesn't need to wait for a counter write.
-- **Auth middleware single-query design**: Looking up by API key in one query with `is_admin` inline is clean and avoids a second trip for permission checks.
-- **CSS rule scan cap at 500** (`inspector.ts:192`): Correct mitigation for MUI/Ant Design pages with thousands of rules.
-- **VLQ decode lookup table** (`sourcemap.ts:205-207`): Pre-building the `Uint8Array(128)` lookup instead of `indexOf` on the charset string is the right approach — O(1) vs O(64) per character.
+- **Error buffer with debounced flush** (`background/index.ts:164–191`): The in-memory buffer + 100ms debounce before `chrome.storage.session.set` is correct. Avoids hammering storage on rapid error bursts (e.g., a React component throwing on every render).
+- **VLQ decode cache** (`sourcemap.ts:92–95`): Caching the decoded mapping segments separately from the raw source map is correct. VLQ decoding is O(n) over the mappings string which can be large; caching it per script URL is the right call.
+- **Response cache with `isCacheable` heuristic** (`cache.ts:17–23`): Correctly limits caching to short, non-path-specific errors. The 200-character limit and file path regex are well-calibrated.
+- **Fire-and-forget for non-critical writes** (`decode.ts:103, 117`): The `cacheUtils.set()` and `increment_daily_usage` RPC are correctly fire-and-forget. The same pattern should be extended to `logDecode`.
+- **CSS source map cache** (`inspector.ts:255`): `cssMapCache` correctly deduplicates repeated fetches of the same stylesheet map within a session.
+- **Error deduplication window** (`background/index.ts:184`): The 500ms dedup window prevents storage thrash from rapidly repeating errors (e.g., infinite error loops).
+- **`Promise.all()` for parallel queries in `usageRoute`** (`usage.ts:13`): The `daily_usage` and `users` queries run in parallel — correct pattern. The `users` query is the redundant one (addressed above), but the parallelism itself is right.
+- **RAF-gated overlay updates in inspector** (`inspector.ts:66–78`): Using `requestAnimationFrame` to debounce mousemove overlay updates is correct; avoids layout thrash on rapid mouse movement.
+- **Tab-scoped error storage** (`background/index.ts:161`): Separate `Map<tabId, errors[]>` per tab prevents cross-tab state pollution and bounds memory usage correctly.

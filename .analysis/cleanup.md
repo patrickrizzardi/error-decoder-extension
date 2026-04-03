@@ -1,173 +1,93 @@
-# Cleanup Report: Error Decoder Extension
+# Code Cleanup Report
 
-**Analyzed**: 2026-04-02
-**Scope**: Full monorepo (API backend + Chrome extension + web)
-**Dead Code Found**: 7 issues
+**Analyzed**: 2025-04-02  
+**Scope**: Full codebase (packages/api/src/, packages/extension/src/, packages/web/src/)  
+**Dead Code Found**: 2 instances
 
 ---
 
 ## Findings by Category
 
-### Critical Bug (High Priority)
+### Unused Exports (2 found)
 
-#### Hardcoded Model in Logging
-- **Location**: `packages/api/src/routes/decode.ts:140`
-- **Issue**: `logDecode()` function always logs `model_used: "haiku"` regardless of which model was actually used
+#### 1. Unused Type Export
+- **File**: `packages/api/src/schemas/feedback.ts:8`
+- **Finding**: `ValidatedFeedbackRequest` type exported but never imported or used anywhere
 - **Evidence**: 
-  - Line 115: `logDecode(..., inputTokens, outputTokens, costCents, responseTimeMs)` — called with only 9 params, no model parameter
-  - Line 140: `model_used: "haiku"` hardcoded
-  - Line 46: `const useModel = requestedModel === "sonnet" && user.plan === "pro" ? "sonnet" : "haiku"` — tracks actual model
-  - Line 109-111: Sonnet usage is tracked separately but log never records which model was used
-- **Impact**: Impossible to track which model was used for cost analysis, billing accuracy, and Sonnet quota auditing
-- **Severity**: CRITICAL — affects cost tracking and billing
+  - Definition: `export type ValidatedFeedbackRequest = v.InferInput<typeof feedbackRequestSchema>;`
+  - Grep search across entire codebase finds 0 usages in source files (only in previous .analysis/ reports)
+  - The schema itself (`feedbackRequestSchema`) IS used in `packages/api/src/routes/feedback.ts`, but the type wrapper is not
+- **Severity**: Low — Dead type export, no runtime impact but pollutes the public API
+- **Action**: Remove line 8 entirely. The type is not needed; only the schema is used for validation.
 
----
-
-### Unused Code (Type and Function Exports)
-
-#### Unused Type Exports in Schema Files
-- **Location**: `packages/api/src/schemas/checkout.ts:7`, `decode.ts:23`, `feedback.ts:8`
-- **Issue**: Three schema files export TypeScript types that are never imported or used
-  - `ValidatedCheckoutRequest` — defined but never referenced
-  - `ValidatedDecodeRequest` — defined but never referenced  
-  - `ValidatedFeedbackRequest` — defined but never referenced
-- **Evidence**: Grep across entire monorepo finds zero references to these types
-- **Impact**: Dead code that adds clutter to exports and is confused about the intended public API
-- **Severity**: LOW — purely unused types, no functional impact
-
-#### Unused Function Export: `buildUserPrompt()`
-- **Location**: `packages/api/src/lib/prompts.ts:119-147`
-- **Issue**: Function exported but never called from any route or service
-- **Evidence**: 
-  - Lines 119-147: Full function definition with context parameter object
-  - Grep across all codebase: zero references to `buildUserPrompt` anywhere
-  - Prompts are built directly in-line using string concatenation instead (see `packages/extension/src/sidepanel/index.ts:300-304`)
-- **Why Likely Dead**: Appears to be legacy from earlier API design where user context was planned to be formatted server-side
-- **Severity**: LOW — unused utility function, can be safely deleted
-
-#### Unused Constant: `BATCH_SYSTEM_PROMPT`
-- **Location**: `packages/api/src/lib/prompts.ts:37-73`
-- **Issue**: System prompt for batch error analysis is defined but never used
+#### 2. Unused Supabase Client
+- **File**: `packages/api/src/lib/supabase.ts:21-23`
+- **Finding**: `supabasePublic` exported const created but never imported by any route or service
 - **Evidence**:
-  - Full 37-line prompt defined with detailed instructions for multi-error analysis
-  - Grep across codebase: zero references outside the prompts file
-  - Current implementation only supports single-error decode (SYSTEM_PROMPT) or element inspection (ELEMENT_SYSTEM_PROMPT)
-  - Batch errors feature is not yet implemented
-- **Why Dead**: Feature planned but not yet shipped (see MVP design in CLAUDE.md which describes single-error focus)
-- **Severity**: MEDIUM — suggests incomplete feature planning; document why it exists or remove it
+  - Definition: `export const supabasePublic = supabasePublishableKey ? createClient(supabaseUrl, supabasePublishableKey) : null;`
+  - Comment indicates intent: "Public client — respects RLS. For verifying user JWTs."
+  - Grep search finds 0 usages in source code (only in documentation)
+  - All routes use the main `supabase` service-role client (e.g., lines 2-3 in decode.ts, auth.ts, etc.)
+- **Severity**: Medium — Unused export, wasted compute at startup (creates Supabase client even if never used)
+- **Action**: Either:
+  - Remove lines 21-23 if RLS-based JWT verification is not currently needed
+  - Or keep as-is if planning JWT verification in future (mark with TODO comment if so)
 
 ---
 
-### Unused Session Storage Wrapper
+## Analysis Details
 
-#### Unused `sessionStorage` Object
-- **Location**: `packages/extension/src/shared/storage.ts:32-41`
-- **Issue**: Wrapper object around `chrome.storage.session` is defined but never used
-- **Evidence**:
-  - Lines 32-41: Full `sessionStorage` object with `get()` and `set()` methods
-  - Grep across extension codebase: never called; all session storage uses `chrome.storage.session` directly
-  - Example: `chrome.storage.session.get()` and `chrome.storage.session.set()` calls everywhere (background/index.ts, sidepanel/index.ts)
-- **Why Dead**: Wrapper was created for consistency with `storage` object but never adopted
-- **Severity**: LOW — unused utility wrapper, can be safely deleted
+### Search Methodology
 
----
+1. **Scanned all TypeScript source files** (65 .ts files across 3 packages)
+2. **Excluded**:
+   - Auto-generated .d.ts declaration files (packages/api/dist/)
+   - Legitimate comments (docstrings, implementation notes)
+   - Underscore-prefixed variables (intentionally unused)
+   - Parameters required by interface signatures (e.g., error handlers)
+   - Side-effect imports
+   - Dynamic/string-referenced code
+3. **Verified all**:
+   - Route handlers mounted in index.ts (9 routes, all mounted)
+   - Middleware usage (authMiddleware, rateLimitMiddleware both used)
+   - Utility functions (cacheUtils methods all used, api object methods all used)
+   - Shared components (all setupResizableGrip, copyToClipboard, showConfirmModal, storage, sensitive-check functions are used)
+   - Tech detection and source map resolution (all exported functions called)
 
-### Incomplete/Unmaintained Features
+### What NOT Flagged (Intentional Code)
 
-#### DevTools Panel Infrastructure
-- **Location**: `packages/extension/src/devtools/devtools.ts`, `devtools/panel.ts`, `devtools/devtools.html`
-- **Issue**: Fully implemented DevTools panel that works but is not documented as a feature
-- **Evidence**:
-  - `manifest.json:36` declares `"devtools_page": "devtools/devtools.html"`
-  - Both `.ts` files are complete and functional (error listening, error list, decode UI)
-  - Full implementation in `devtools/panel.ts:1-179`
-  - But: Feature is not mentioned in CLAUDE.md product spec or extension docs
-  - Not mentioned in any marketing materials or user-facing docs
-- **Note**: This is NOT dead code (it's fully functional and wired up) — just undocumented
-- **Recommendation**: Either document as a feature or remove if not part of MVP
-- **Severity**: LOW — functional code, just undocumented
+- **manifest.side_panel, manifest.action.default_popup deletions** (build.ts:72-73): Intentional per comments ("No popup — icon click toggles sidebar")
+- **supabasePublishableKey null coalescing** (supabase.ts:21): Legitimate fallback pattern
+- **Commented headers in routes**: All are descriptive comments, not dead code
+- **Module-level state in sidepanel/index.ts**: Variables like `currentDecodeEntry`, `sessionDecodeCount`, `allErrors`, `renderedCount` are all actively used
+- **Error handler parameters**: ErrorHandler signature requires (err, c) per Hono framework
 
 ---
 
-## Summary
+## Priority
 
-### Must Clean (High Priority)
+### Must Clean (High Confidence)
 
-1. **Fix hardcoded model in logging** (`decode.ts:140`)
-   - Pass `useModel` as parameter to `logDecode()`
-   - Update signature: `logDecode(..., model: "haiku" | "sonnet")`
-   - This is a BUG, not optional cleanup
+1. **Remove `ValidatedFeedbackRequest` export** (feedback.ts:8)
+   - Zero references in codebase
+   - Type inference happens automatically via Valibot's `InferInput`
+   - Safe removal, no downstream impact
 
-### Should Clean (Low Priority, Code Quality)
+### Verify First (Medium Confidence)
 
-2. Remove unused type exports:
-   - `ValidatedCheckoutRequest` from `schemas/checkout.ts:7`
-   - `ValidatedDecodeRequest` from `schemas/decode.ts:23`
-   - `ValidatedFeedbackRequest` from `schemas/feedback.ts:8`
-
-3. Remove unused function `buildUserPrompt()` from `lib/prompts.ts:119-147`
-
-4. Remove unused constant `BATCH_SYSTEM_PROMPT` from `lib/prompts.ts:37-73` (or document why it exists)
-
-5. Remove unused `sessionStorage` wrapper from `shared/storage.ts:32-41`
-
-### Optional (Scope Decision)
-
-6. Decide on DevTools panel:
-   - If keeping: Document as a feature
-   - If not: Remove `devtools.ts`, `panel.ts`, `devtools.html` and manifest entry
+1. **`supabasePublic` export** (supabase.ts:21-23)
+   - May be planned for future JWT verification
+   - Check git history or CLAUDE.md for intent
+   - If not planned: remove and save `SUPABASE_PUBLISHABLE_KEY` env validation
+   - If planned: add TODO comment explaining the deferred use case
 
 ---
 
-## Code References
+## Notes
 
-### Bug Details: Hardcoded Model in Logging
-
-**Current code** (packages/api/src/routes/decode.ts):
-
-```typescript
-// Line 46: Tracks actual model
-const useModel = requestedModel === "sonnet" && user.plan === "pro" ? "sonnet" : "haiku";
-
-// ...
-
-// Line 115: Calls logging with no model info
-logDecode(user.id, errorHash, errorText, markdown, false, inputTokens, outputTokens, costCents, responseTimeMs);
-
-// Line 130-149: Function always logs "haiku"
-const logDecode = (
-  userId: string, errorHash: string, errorText: string, response: any,
-  cacheHit: boolean, inputTokens: number, outputTokens: number,
-  costCents: number, responseTimeMs: number
-) => {
-  supabase.from("decodes").insert({
-    // ... other fields ...
-    model_used: "haiku",  // BUG: Always "haiku", ignores actual useModel
-    // ...
-  })
-};
-```
-
-**Fix**: Pass `useModel` to the function:
-
-```typescript
-// Change function signature
-const logDecode = (
-  userId: string, errorHash: string, errorText: string, response: any,
-  cacheHit: boolean, inputTokens: number, outputTokens: number,
-  costCents: number, responseTimeMs: number,
-  modelUsed: "haiku" | "sonnet"  // Add parameter
-) => {
-  supabase.from("decodes").insert({
-    // ...
-    model_used: modelUsed,  // Use actual model
-    // ...
-  })
-};
-
-// Line 115: Update call
-logDecode(user.id, errorHash, errorText, markdown, false, inputTokens, outputTokens, costCents, responseTimeMs, useModel);
-
-// Line 74: Also update cached case
-logDecode(user.id, errorHash, errorText, cached as any, true, 0, 0, 0, 0, useModel);
-```
+- Codebase is well-organized with minimal dead code
+- All route files are mounted and functional
+- No orphaned files detected
+- No unreachable code paths found
+- No commented-out feature code detected
+- The small number of findings (2) suggests good code hygiene during development
