@@ -15,18 +15,27 @@ export type PageContext = {
   networkFailures?: string[];
 };
 
+export type ModelName = "haiku" | "sonnet";
+
 export type DecodeRequest = {
   errorText: string;
   pageContext?: PageContext;
-  model?: "haiku" | "sonnet";
+  model?: ModelName;
+  mode?: "error" | "inspect";
 };
 
 export type DecodeResponse = {
   markdown: string;
-  model: "haiku" | "sonnet";
+  model: ModelName;
   cached: boolean;
   decodeId?: string;
 };
+
+// --- Business Limits ---
+
+export const FREE_TIER_DAILY_LIMIT = 3;
+export const FREE_TIER_CHAR_LIMIT = 1000;
+export const PRO_SONNET_MONTHLY_LIMIT = 20;
 
 // --- Usage ---
 
