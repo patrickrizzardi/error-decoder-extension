@@ -75,12 +75,18 @@ tabs.forEach((tab) => {
 // ERRORS TAB — real-time feed
 // ============================================
 
-const errorFeed = document.getElementById("error-feed")!;
-const emptyState = document.getElementById("empty-state")!;
-const feedActions = document.getElementById("feed-actions")!;
-const errorCountEl = document.getElementById("error-count")!;
-const errorBadge = document.getElementById("error-badge")!;
-const statusEl = document.getElementById("status")!;
+const errorFeed = document.getElementById("error-feed");
+if (!errorFeed) throw new Error("Missing #error-feed element");
+const emptyState = document.getElementById("empty-state");
+if (!emptyState) throw new Error("Missing #empty-state element");
+const feedActions = document.getElementById("feed-actions");
+if (!feedActions) throw new Error("Missing #feed-actions element");
+const errorCountEl = document.getElementById("error-count");
+if (!errorCountEl) throw new Error("Missing #error-count element");
+const errorBadge = document.getElementById("error-badge");
+if (!errorBadge) throw new Error("Missing #error-badge element");
+const statusEl = document.getElementById("status");
+if (!statusEl) throw new Error("Missing #status element");
 
 // Get the tab ID this sidebar is running in
 let currentTabId: number | null = null;
@@ -236,7 +242,9 @@ const getSortMode = (): SortMode => {
   return (select?.value ?? "newest") as SortMode;
 };
 
-document.getElementById("error-sort")!.addEventListener("change", () => {
+const errorSort = document.getElementById("error-sort");
+if (!errorSort) throw new Error("Missing #error-sort element");
+errorSort.addEventListener("change", () => {
   const mode = getSortMode();
   const sorted = sortErrors(allErrors, mode);
   rerenderFeed(sorted);
@@ -318,9 +326,11 @@ const renderErrorItem = (err: CapturedError, index: number) => {
 
 const updateSelectionUI = () => {
   const count = selectedErrors.size;
-  const decodeSelectedBtn = document.getElementById("decode-selected") as HTMLButtonElement;
-  decodeSelectedBtn.disabled = count === 0;
-  decodeSelectedBtn.textContent = count > 0 ? `Decode Selected (${count})` : "Decode Selected";
+  const decodeSelectedBtn = document.getElementById("decode-selected") as HTMLButtonElement | null;
+  if (decodeSelectedBtn) {
+    decodeSelectedBtn.disabled = count === 0;
+    decodeSelectedBtn.textContent = count > 0 ? `Decode Selected (${count})` : "Decode Selected";
+  }
 };
 
 const updateCounts = (count: number) => {
@@ -331,7 +341,9 @@ const updateCounts = (count: number) => {
 };
 
 // Decode Selected errors
-document.getElementById("decode-selected")!.addEventListener("click", async () => {
+const decodeSelectedEl = document.getElementById("decode-selected");
+if (!decodeSelectedEl) throw new Error("Missing #decode-selected element");
+decodeSelectedEl.addEventListener("click", async () => {
   if (selectedErrors.size === 0) return;
 
   const key = getTabKey();
@@ -354,7 +366,9 @@ document.getElementById("decode-selected")!.addEventListener("click", async () =
 });
 
 // Decode All — paste into decode tab, user picks model
-document.getElementById("decode-all")!.addEventListener("click", async () => {
+const decodeAllEl = document.getElementById("decode-all");
+if (!decodeAllEl) throw new Error("Missing #decode-all element");
+decodeAllEl.addEventListener("click", async () => {
   const key = getTabKey();
   if (!key) return;
   const result = await chrome.storage.session.get(key);
@@ -368,7 +382,9 @@ document.getElementById("decode-all")!.addEventListener("click", async () => {
 });
 
 // Clear errors
-document.getElementById("clear-errors")!.addEventListener("click", async () => {
+const clearErrorsEl = document.getElementById("clear-errors");
+if (!clearErrorsEl) throw new Error("Missing #clear-errors element");
+clearErrorsEl.addEventListener("click", async () => {
   const key = getTabKey();
   if (key) await chrome.storage.session.set({ [key]: [] });
   allErrors = [];
@@ -395,7 +411,8 @@ const loadTechStack = async () => {
 
 const renderTechBar = (tech: typeof detectedTech) => {
   detectedTech = tech;
-  const bar = document.getElementById("tech-bar")!;
+  const bar = document.getElementById("tech-bar");
+  if (!bar) throw new Error("Missing #tech-bar element");
   if (tech.length === 0) {
     bar.classList.add("hidden");
     return;
@@ -419,12 +436,17 @@ const getTechContext = (): string => {
 // ============================================
 
 const decodeInput = document.getElementById("decode-input") as HTMLTextAreaElement;
-const decodeResult = document.getElementById("decode-result")!;
+const decodeResult = document.getElementById("decode-result");
+if (!decodeResult) throw new Error("Missing #decode-result element");
 const sonnetBtn = document.getElementById("decode-sonnet") as HTMLButtonElement;
-const sonnetRemaining = document.getElementById("sonnet-remaining")!;
-const haikuRemaining = document.getElementById("haiku-remaining")!;
-const usageBar = document.getElementById("usage-bar")!;
-const usageIndicator = document.getElementById("usage-indicator")!;
+const sonnetRemaining = document.getElementById("sonnet-remaining");
+if (!sonnetRemaining) throw new Error("Missing #sonnet-remaining element");
+const haikuRemaining = document.getElementById("haiku-remaining");
+if (!haikuRemaining) throw new Error("Missing #haiku-remaining element");
+const usageBar = document.getElementById("usage-bar");
+if (!usageBar) throw new Error("Missing #usage-bar element");
+const usageIndicator = document.getElementById("usage-indicator");
+if (!usageIndicator) throw new Error("Missing #usage-indicator element");
 
 // Track current plan for nudge logic
 let currentPlan: string = "free";
@@ -738,7 +760,8 @@ const renderFeedbackButtons = (container: HTMLElement, decodeId?: string, existi
 const populateHistoryDropdown = async () => {
   const history = await loadHistory();
   const select = document.getElementById("history-select") as HTMLSelectElement;
-  const historyBar = document.getElementById("decode-history-bar")!;
+  const historyBar = document.getElementById("decode-history-bar");
+  if (!historyBar) throw new Error("Missing #decode-history-bar element");
 
   if (history.length === 0) {
     historyBar.classList.add("hidden");
@@ -757,7 +780,9 @@ const populateHistoryDropdown = async () => {
   });
 };
 
-document.getElementById("history-select")!.addEventListener("change", async (e) => {
+const historySelectEl = document.getElementById("history-select");
+if (!historySelectEl) throw new Error("Missing #history-select element");
+historySelectEl.addEventListener("change", async (e) => {
   const select = e.target as HTMLSelectElement;
   const id = select.value;
   if (!id) return;
@@ -831,10 +856,15 @@ inspectBtn.addEventListener("click", startInspect);
 inspectCancelBtn.addEventListener("click", cancelInspect);
 
 // Re-inspect — pick a new element
-document.getElementById("inspect-new")!.addEventListener("click", () => {
-  document.getElementById("inspect-selected")!.classList.add("hidden");
-  document.getElementById("inspect-start")!.classList.remove("hidden");
-  document.getElementById("inspect-result")!.innerHTML = "";
+const inspectNewEl = document.getElementById("inspect-new");
+if (!inspectNewEl) throw new Error("Missing #inspect-new element");
+inspectNewEl.addEventListener("click", () => {
+  const inspectSelected = document.getElementById("inspect-selected");
+  if (inspectSelected) inspectSelected.classList.add("hidden");
+  const inspectStart = document.getElementById("inspect-start");
+  if (inspectStart) inspectStart.classList.remove("hidden");
+  const inspectResult = document.getElementById("inspect-result");
+  if (inspectResult) inspectResult.innerHTML = "";
   chrome.storage.session.remove("selectedElement");
   startInspect();
 });
@@ -847,8 +877,10 @@ document.addEventListener("keydown", (e) => {
 });
 
 const showInspectResult = (el: InspectedElement) => {
-  document.getElementById("inspect-start")!.classList.add("hidden");
-  document.getElementById("inspect-selected")!.classList.remove("hidden");
+  const inspectStart = document.getElementById("inspect-start");
+  if (inspectStart) inspectStart.classList.add("hidden");
+  const inspectSelected = document.getElementById("inspect-selected");
+  if (inspectSelected) inspectSelected.classList.remove("hidden");
   inspectBtn.textContent = "🔍 Click to inspect an element";
   inspectBtn.disabled = false;
   inspectCancelBtn.classList.add("hidden");
@@ -871,8 +903,10 @@ const showInspectResult = (el: InspectedElement) => {
     }
   }
 
-  document.getElementById("element-info")!.textContent = info;
-  document.getElementById("inspect-result")!.innerHTML = "";
+  const elementInfoEl = document.getElementById("element-info");
+  if (elementInfoEl) elementInfoEl.textContent = info;
+  const inspectResultEl = document.getElementById("inspect-result");
+  if (inspectResultEl) inspectResultEl.innerHTML = "";
 
   // Show source map tip if on production without resolved files
   const hasResolvedFiles = el.cssRules?.some((r: CSSRuleInfo) => r.originalFile);
@@ -944,7 +978,8 @@ ${selectedElement.outerHTML}${getTechContext()}`;
     }
   }
 
-  const inspectResult = document.getElementById("inspect-result")!;
+  const inspectResult = document.getElementById("inspect-result");
+  if (!inspectResult) throw new Error("Missing #inspect-result element");
   inspectResult.innerHTML = `<div class="skeleton"></div><div class="skeleton short"></div>`;
 
   const apiKey = await getApiKey();
@@ -991,10 +1026,13 @@ ${selectedElement.outerHTML}${getTechContext()}`;
 });
 
 // Enter submits, Shift+Enter for newlines
-document.getElementById("inspect-question")!.addEventListener("keydown", (e) => {
+const inspectQuestionEl = document.getElementById("inspect-question");
+if (!inspectQuestionEl) throw new Error("Missing #inspect-question element");
+inspectQuestionEl.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
-    document.getElementById("inspect-ask-btn")!.click();
+    const askBtn = document.getElementById("inspect-ask-btn");
+    if (askBtn) askBtn.click();
   }
 });
 
@@ -1035,11 +1073,15 @@ const renderMarkdown = (markdown: string, container: HTMLElement) => {
 // Other UI
 // ============================================
 
-document.getElementById("close-panel")!.addEventListener("click", () => {
+const closePanelEl = document.getElementById("close-panel");
+if (!closePanelEl) throw new Error("Missing #close-panel element");
+closePanelEl.addEventListener("click", () => {
   window.parent.postMessage({ type: "ERRORDECODER_CLOSE" }, "*");
 });
 
-document.getElementById("settings-link")!.addEventListener("click", (e) => {
+const settingsLinkEl = document.getElementById("settings-link");
+if (!settingsLinkEl) throw new Error("Missing #settings-link element");
+settingsLinkEl.addEventListener("click", (e) => {
   e.preventDefault();
   chrome.runtime.openOptionsPage();
 });
