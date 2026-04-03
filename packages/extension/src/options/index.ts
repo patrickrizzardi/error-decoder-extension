@@ -14,18 +14,26 @@ const loadProfile = async () => {
   const plan = await storage.get("userPlan");
   const apiKey = await storage.get("apiKey");
 
-  document.getElementById("email")!.textContent = email ?? "Not signed in";
-  document.getElementById("plan")!.textContent = plan === "pro" ? "Pro" : "Free";
-  document.getElementById("api-key")!.textContent = apiKey
+  const emailEl = document.getElementById("email");
+  if (!emailEl) throw new Error("Missing #email element");
+  emailEl.textContent = email ?? "Not signed in";
+  const planEl = document.getElementById("plan");
+  if (!planEl) throw new Error("Missing #plan element");
+  planEl.textContent = plan === "pro" ? "Pro" : "Free";
+  const apiKeyEl = document.getElementById("api-key");
+  if (!apiKeyEl) throw new Error("Missing #api-key element");
+  apiKeyEl.textContent = apiKey
     ? `${apiKey.slice(0, 8)}••••••••`
     : "Not set";
 
   // Hide manual key input if already has a key
-  const manualSection = document.getElementById("manual-key-section")!;
+  const manualSection = document.getElementById("manual-key-section");
+  if (!manualSection) throw new Error("Missing #manual-key-section element");
   manualSection.style.display = apiKey ? "none" : "block";
 
   // Manage/Upgrade button — text changes based on plan
-  const manageBtn = document.getElementById("manage-sub")!;
+  const manageBtn = document.getElementById("manage-sub");
+  if (!manageBtn) throw new Error("Missing #manage-sub element");
   if (!apiKey) {
     manageBtn.style.display = "none";
   } else {
@@ -37,7 +45,8 @@ const loadProfile = async () => {
 // Save manually entered API key — validate first, then save
 document.getElementById("save-key")?.addEventListener("click", async () => {
   const input = document.getElementById("manual-key-input") as HTMLInputElement;
-  const statusEl = document.getElementById("save-status")!;
+  const statusEl = document.getElementById("save-status");
+  if (!statusEl) throw new Error("Missing #save-status element");
   const key = input.value.trim();
   if (!key) return;
 
@@ -77,8 +86,8 @@ document.getElementById("save-key")?.addEventListener("click", async () => {
 document.getElementById("copy-key")?.addEventListener("click", async () => {
   const apiKey = await storage.get("apiKey");
   if (apiKey) {
-    const btn = document.getElementById("copy-key")!;
-    copyToClipboard(btn, () => apiKey, "Copy Key");
+    const btn = document.getElementById("copy-key");
+    if (btn) copyToClipboard(btn, () => apiKey, "Copy Key");
   }
 });
 
