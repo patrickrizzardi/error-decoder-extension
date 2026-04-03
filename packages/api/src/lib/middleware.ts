@@ -69,7 +69,7 @@ export const authMiddleware = async (c: Context, next: Next) => {
   await next();
 };
 
-// Rate limit check for free users (read-only — increment happens after AI success)
+// Rate limit check for free users — atomic check-and-increment prevents TOCTOU races
 export const rateLimitMiddleware = async (c: Context, next: Next) => {
   const user = c.get("user");
 
@@ -78,20 +78,18 @@ export const rateLimitMiddleware = async (c: Context, next: Next) => {
     return;
   }
 
-  const today = new Date().toISOString().split("T")[0];
-  const { data: usage, error } = await supabase
-    .from("daily_usage")
-    .select("count")
-    .eq("user_id", user.id)
-    .eq("date", today)
-    .single();
+  // Atomic check-and-increment: prevents race conditions
+  const { data: allowed, error } = await supabase.rpc("check_and_increment_daily_usage", {
+    p_user_id: user.id,
+    p_limit: FREE_TIER_DAILY_LIMIT,
+  });
 
-  if (error && error.code !== "PGRST116") {
-    console.error("[Rate Limit] Failed to check usage:", error.message);
+  if (error) {
+    console.error("[Rate Limit] Atomic check failed:", error.message);
     return c.json({ error: { message: "Service temporarily unavailable.", code: errorCodes.serverError } }, 503);
   }
 
-  if ((usage?.count ?? 0) >= FREE_TIER_DAILY_LIMIT) {
+  if (!allowed) {
     return c.json(
       {
         error: {
