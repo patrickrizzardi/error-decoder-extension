@@ -242,15 +242,18 @@
 
     <!-- Success state (after auth) -->
     <div id="success-state" class="success-state hidden">
-      <h2>You're in!</h2>
+      <h2>You're all set!</h2>
       <p>Your API key for the extension:</p>
       <div class="api-key-display">
         <span id="api-key-text"></span>
         <button class="copy-btn" id="copy-key">Copy</button>
+        <button class="copy-btn" id="toggle-key" style="right: 60px;">Show</button>
       </div>
       <p class="note">
-        The extension should pick this up automatically.<br>
-        If not, paste it in the extension's options page.
+        The extension has been updated automatically.
+      </p>
+      <p class="note" id="fallback-note" style="display:none; margin-top: 8px;">
+        Extension not detected? <button class="copy-btn" id="copy-key-fallback" style="position:static; display:inline-block; margin:0; padding: 2px 8px; font-size:11px;">Copy key</button> and paste it in the extension's Settings page.
       </p>
       <button class="btn-logout" id="logout-btn">Log Out</button>
     </div>
@@ -371,7 +374,14 @@
 
           // No checkout intent (or checkout failed) — show API key
           showState("success-state");
-          document.getElementById("api-key-text").textContent = json.data.apiKey;
+          const apiKeyEl = document.getElementById("api-key-text");
+          apiKeyEl.textContent = json.data.apiKey.slice(0, 8) + "••••••••";
+          apiKeyEl.dataset.fullKey = json.data.apiKey;
+          apiKeyEl.dataset.revealed = "false";
+          setTimeout(() => {
+            const fallback = document.getElementById("fallback-note");
+            if (fallback) fallback.style.display = "block";
+          }, 3000);
         }
       } catch {
         showState("auth-forms");
@@ -435,11 +445,34 @@
     });
 
     // Copy key
-    document.getElementById("copy-key")?.addEventListener("click", async () => {
-      const key = document.getElementById("api-key-text").textContent;
+    const doCopyKey = async (buttonId) => {
+      const key = document.getElementById("api-key-text").dataset.fullKey;
+      if (!key) return;
       await navigator.clipboard.writeText(key);
-      document.getElementById("copy-key").textContent = "Copied!";
-      setTimeout(() => { document.getElementById("copy-key").textContent = "Copy"; }, 2000);
+      const btn = document.getElementById(buttonId);
+      if (btn) {
+        const original = btn.textContent;
+        btn.textContent = "Copied!";
+        setTimeout(() => { btn.textContent = original; }, 2000);
+      }
+    };
+
+    document.getElementById("copy-key")?.addEventListener("click", () => doCopyKey("copy-key"));
+    document.getElementById("copy-key-fallback")?.addEventListener("click", () => doCopyKey("copy-key-fallback"));
+
+    // Show/hide key toggle
+    document.getElementById("toggle-key")?.addEventListener("click", () => {
+      const apiKeyEl = document.getElementById("api-key-text");
+      const isRevealed = apiKeyEl.dataset.revealed === "true";
+      if (isRevealed) {
+        apiKeyEl.textContent = apiKeyEl.dataset.fullKey.slice(0, 8) + "••••••••";
+        apiKeyEl.dataset.revealed = "false";
+        document.getElementById("toggle-key").textContent = "Show";
+      } else {
+        apiKeyEl.textContent = apiKeyEl.dataset.fullKey;
+        apiKeyEl.dataset.revealed = "true";
+        document.getElementById("toggle-key").textContent = "Hide";
+      }
     });
 
     // Check for existing session (only runs if NOT logout flow)
