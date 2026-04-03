@@ -1,8 +1,6 @@
 import type { Context, Next } from "hono";
 import { supabase } from "./supabase";
-import { errorCodes } from "@shared/types";
-
-const FREE_TIER_DAILY_LIMIT = 3;
+import { errorCodes, FREE_TIER_DAILY_LIMIT } from "@shared/types";
 
 type AuthUser = {
   id: string;

@@ -5,10 +5,8 @@ import { anthropic, models } from "../lib/anthropic";
 import { supabase } from "../lib/supabase";
 import { cacheUtils } from "../lib/cache";
 import { SYSTEM_PROMPT, ELEMENT_SYSTEM_PROMPT } from "../lib/prompts";
-import { errorCodes } from "@shared/types";
+import { errorCodes, FREE_TIER_CHAR_LIMIT, PRO_SONNET_MONTHLY_LIMIT, type ModelName } from "@shared/types";
 
-const FREE_TIER_CHAR_LIMIT = 1000;
-const PRO_SONNET_MONTHLY_LIMIT = 20;
 const AI_MAX_TOKENS = 1500;
 
 const decodeRequestSchema = v.object({
@@ -134,7 +132,7 @@ decodeRoute.post("/", authMiddleware, rateLimitMiddleware, async (c) => {
 const logDecode = (
   id: string,
   userId: string, errorHash: string, errorText: string, markdown: string,
-  modelUsed: "haiku" | "sonnet",
+  modelUsed: ModelName,
   cacheHit: boolean, inputTokens: number, outputTokens: number,
   costCents: number, responseTimeMs: number
 ): void => {

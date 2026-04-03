@@ -10,15 +10,18 @@ usageRoute.get("/", authMiddleware, async (c) => {
 
   const today = new Date().toISOString().split("T")[0];
 
-  const [{ data: usage }, { data: userRow }] = await Promise.all([
-    supabase.from("daily_usage").select("count").eq("user_id", user.id).eq("date", today).single(),
-    supabase.from("users").select("sonnet_uses_this_month, sonnet_month").eq("id", user.id).single(),
-  ]);
+  const { data: usage } = await supabase
+    .from("daily_usage")
+    .select("count")
+    .eq("user_id", user.id)
+    .eq("date", today)
+    .single();
 
+  // Sonnet usage is already in the auth context — no second DB query needed
   const currentMonth = new Date().toISOString().slice(0, 7);
   const sonnetUsed =
-    userRow?.sonnet_month === currentMonth
-      ? (userRow?.sonnet_uses_this_month ?? 0)
+    user.sonnetMonth === currentMonth
+      ? (user.sonnetUsesThisMonth ?? 0)
       : 0;
 
   // Reset at midnight UTC
