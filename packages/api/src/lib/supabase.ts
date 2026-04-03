@@ -15,9 +15,3 @@ export const supabase = createClient(supabaseUrl, supabaseSecretKey, {
   },
 });
 
-// Public client — respects RLS. For verifying user JWTs.
-const supabasePublishableKey = process.env.SUPABASE_PUBLISHABLE_KEY;
-
-export const supabasePublic = supabasePublishableKey
-  ? createClient(supabaseUrl, supabasePublishableKey)
-  : null;
