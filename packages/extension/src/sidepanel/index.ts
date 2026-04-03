@@ -1,13 +1,13 @@
 // Sidebar — tabbed debugging dashboard
 // Tabs: Errors (feed) | Decode (paste + model picker) | Inspect (element AI)
 
-import { marked } from "marked";
-import DOMPurify from "dompurify";
 import { escapeHtml } from "../shared/html";
-import { copyToClipboard, setupResizableGrip } from "../shared/ui";
+import { setupResizableGrip } from "../shared/ui";
+import { renderMarkdownWithCopyButtons } from "../shared/markdown";
 import { getApiKey } from "../shared/storage";
-import { api, API_BASE, AUTH_URL, SITE_URL } from "../shared/api";
+import { api, AUTH_URL, SITE_URL } from "../shared/api";
 import type { CapturedError } from "@shared/types";
+import { errorCodes } from "@shared/types";
 import { checkSensitiveData, formatSensitiveWarning } from "../shared/sensitive-check";
 import { showConfirmModal } from "../shared/modal";
 import { loadHistory, saveToHistory, updateHistoryFeedback, type DecodeHistoryEntry } from "./history";
@@ -51,6 +51,7 @@ let currentDecodeEntry: DecodeHistoryEntry | null = null;
 
 // Feature 6: soft upgrade nudge — count decodes this session
 let sessionDecodeCount = 0;
+let lastKnownUsage = { used: 0, limit: 3 };
 
 // Feature 9: store all errors for re-sorting
 let allErrors: CapturedError[] = [];
@@ -270,6 +271,8 @@ const renderNewErrors = (errors: CapturedError[]) => {
     // Re-sort the full set and re-render
     rerenderFeed(sortErrors(errors, mode));
   }
+  // Scroll once after all items are rendered — not inside the render loop
+  errorFeed.scrollTop = errorFeed.scrollHeight;
   updateCounts(errors.length);
 };
 
@@ -321,7 +324,6 @@ const renderErrorItem = (err: CapturedError, index: number) => {
   });
 
   errorFeed.appendChild(item);
-  errorFeed.scrollTop = errorFeed.scrollHeight;
 };
 
 const updateSelectionUI = () => {
@@ -501,10 +503,18 @@ const loadUserPlan = async () => {
     const response = await api.usage();
     if ("data" in response) {
       const { plan, used, limit, sonnetUsed, sonnetLimit, resetsAt } = response.data;
+      lastKnownUsage = { used, limit };
       if (plan === "pro") {
         sonnetBtn.classList.remove("hidden");
         const remaining = sonnetLimit - sonnetUsed;
-        sonnetRemaining.textContent = `(${remaining} left)`;
+        if (remaining > 0) {
+          sonnetRemaining.textContent = `(${remaining} left)`;
+        } else {
+          const nextMonth = new Date();
+          nextMonth.setMonth(nextMonth.getMonth() + 1);
+          const monthName = nextMonth.toLocaleString("default", { month: "short" });
+          sonnetRemaining.textContent = `(resets ${monthName} 1)`;
+        }
       }
       updateUsageDisplay(used, limit, plan, resetsAt);
       chrome.storage.local.set({ userPlan: plan });
@@ -601,35 +611,35 @@ const decodeSingle = async (errorText: string, model: "haiku" | "sonnet") => {
       isDecoding = false;
       return;
     }
+  } else {
+    // No sensitive data — briefly show scan result for trust signal
+    setDecoding(true, "No sensitive data detected \u2713");
+    await new Promise((r) => setTimeout(r, 600));
   }
 
   setDecoding(true, "Resolving source maps...");
   decodeInput.classList.remove("has-results");
-  decodeResult.innerHTML = "";
+  decodeResult.innerHTML = `<div class="skeleton"></div><div class="skeleton short"></div><div class="skeleton"></div>`;
 
   // Resolve source maps to get actual file names + source code
   const enrichedText = await resolveSourceMaps(errorText);
 
   setDecoding(true, "Decoding...");
-  decodeResult.innerHTML = `<div class="skeleton"></div><div class="skeleton short"></div><div class="skeleton"></div>`;
 
   try {
-    const response = await fetch(`${API_BASE}/decode`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ errorText: enrichedText + getTechContext(), model }),
-    });
+    const json = await api.decode({ errorText: enrichedText + getTechContext(), model });
 
-    const json = await response.json();
-
-    if (json.error) {
-      if (response.status === 401) {
+    if ("error" in json) {
+      const isAuthError =
+        json.error.code === errorCodes.authRequired ||
+        json.error.code === errorCodes.authInvalid;
+      if (isAuthError) {
         decodeResult.innerHTML = `
           <div class="auth-prompt">
-            <p>Your API key is invalid or expired.</p>
-            <p class="auth-sub">Sign in again or paste a new key in Settings.</p>
+            <p>Your session has expired.</p>
+            <p class="auth-sub">Sign in again to continue decoding.</p>
             <button class="btn btn-primary auth-signup-btn">Sign In</button>
-            <p class="auth-fallback"><a href="#" class="auth-settings-link">Open Settings</a></p>
+            <p class="auth-fallback">Wrong account? <a href="#" class="auth-settings-link">Change API key in Settings</a></p>
           </div>`;
         decodeResult.querySelector(".auth-signup-btn")?.addEventListener("click", () => {
           chrome.tabs.create({ url: AUTH_URL });
@@ -645,6 +655,7 @@ const decodeSingle = async (errorText: string, model: "haiku" | "sonnet") => {
           <div class="auth-prompt">
             <p>${escapeHtml(json.error.message)}</p>
             <a href="#" class="btn btn-primary btn-upgrade" id="upgrade-429">Upgrade to Pro</a>
+            <p class="auth-fallback">Limit resets at midnight UTC.</p>
           </div>`;
         decodeResult.querySelector("#upgrade-429")?.addEventListener("click", (e) => {
           e.preventDefault();
@@ -656,10 +667,18 @@ const decodeSingle = async (errorText: string, model: "haiku" | "sonnet") => {
       return;
     }
 
-    const { markdown, decodeId, cached } = json.data as { markdown: string; decodeId?: string; cached: boolean; model: "haiku" | "sonnet" };
+    const { markdown, decodeId, cached } = json.data;
 
     renderMarkdown(markdown, decodeResult);
     decodeInput.classList.add("has-results");
+
+    // Show cached indicator
+    if (cached) {
+      const badge = document.createElement("div");
+      badge.className = "decode-meta";
+      badge.textContent = "⚡ Instant (cached)";
+      decodeResult.appendChild(badge);
+    }
 
     // Feature 3: feedback buttons
     renderFeedbackButtons(decodeResult, decodeId);
@@ -679,9 +698,10 @@ const decodeSingle = async (errorText: string, model: "haiku" | "sonnet") => {
     await saveToHistory(entry);
     await populateHistoryDropdown();
 
-    // Feature 6: soft upgrade nudge for free users
+    // Feature 6: soft upgrade nudge for free users — show when running low
     sessionDecodeCount++;
-    if (currentPlan !== "pro" && sessionDecodeCount % 3 === 0) {
+    const remaining = lastKnownUsage.limit - lastKnownUsage.used;
+    if (currentPlan !== "pro" && remaining <= 1 && remaining >= 0) {
       renderUpgradeNudge(decodeResult);
     }
   } catch {
@@ -769,13 +789,27 @@ const populateHistoryDropdown = async () => {
   }
 
   historyBar.classList.remove("hidden");
+
+  const formatTimestamp = (ts: number): string => {
+    const date = new Date(ts);
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const isYesterday = date.toDateString() === yesterday.toDateString();
+
+    const time = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    if (isToday) return `Today ${time}`;
+    if (isYesterday) return `Yesterday ${time}`;
+    return date.toLocaleDateString([], { month: "short", day: "numeric" }) + ` ${time}`;
+  };
+
   // Reset to default option then repopulate
   select.innerHTML = `<option value="">Recent decodes...</option>`;
   history.forEach((entry) => {
     const option = document.createElement("option");
     option.value = entry.id;
-    const time = new Date(entry.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    option.textContent = `${time} — ${entry.errorPreview}`;
+    option.textContent = `${formatTimestamp(entry.timestamp)} — ${entry.errorPreview}`;
     select.appendChild(option);
   });
 };
@@ -805,9 +839,14 @@ const renderUpgradeNudge = (container: HTMLElement) => {
   const nudge = document.createElement("div");
   nudge.className = "upgrade-nudge";
 
+  const remaining = lastKnownUsage.limit - lastKnownUsage.used;
+  const nudgeText = remaining <= 0
+    ? "You've used all your free decodes today. Upgrade for unlimited."
+    : `Only ${remaining} free decode${remaining === 1 ? "" : "s"} left today. Upgrade for unlimited.`;
+
   const text = document.createElement("span");
   text.className = "upgrade-nudge-text";
-  text.innerHTML = `Liked this? Pro gives unlimited decodes + Deep Analysis. <a href="#" class="upgrade-nudge-link">Upgrade</a>`;
+  text.innerHTML = `${nudgeText} <a href="#" class="upgrade-nudge-link">Upgrade</a>`;
 
   const dismiss = document.createElement("button");
   dismiss.className = "upgrade-nudge-dismiss";
@@ -1004,14 +1043,8 @@ ${selectedElement.outerHTML}${getTechContext()}`;
   }
 
   try {
-    const response = await fetch(`${API_BASE}/decode`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ errorText: prompt, mode: "inspect" }),
-    });
-
-    const json = await response.json();
-    if (json.error) {
+    const json = await api.decode({ errorText: prompt, mode: "inspect" });
+    if ("error" in json) {
       inspectResult.innerHTML = `<p class="error-msg">${escapeHtml(json.error.message)}</p>`;
       return;
     }
@@ -1042,31 +1075,7 @@ inspectQuestionEl.addEventListener("keydown", (e) => {
 
 // Feature 4: Copy Full Result — prepend toolbar with Copy button
 const renderMarkdown = (markdown: string, container: HTMLElement) => {
-  container.innerHTML = DOMPurify.sanitize(marked.parse(markdown) as string);
-
-  // Add copy buttons to all code blocks
-  container.querySelectorAll("pre").forEach((pre) => {
-    const wrapper = document.createElement("div");
-    wrapper.className = "code-block";
-    pre.parentNode?.insertBefore(wrapper, pre);
-    wrapper.appendChild(pre);
-
-    const btn = document.createElement("button");
-    btn.className = "copy-btn";
-    btn.textContent = "Copy";
-    btn.addEventListener("click", () => copyToClipboard(btn, () => pre.textContent || ""));
-    wrapper.appendChild(btn);
-  });
-
-  // Prepend toolbar with Copy All button (captures raw markdown)
-  const toolbar = document.createElement("div");
-  toolbar.className = "result-toolbar";
-  const copyAllBtn = document.createElement("button");
-  copyAllBtn.className = "btn btn-secondary copy-all-btn";
-  copyAllBtn.textContent = "Copy";
-  copyAllBtn.addEventListener("click", () => copyToClipboard(copyAllBtn, () => markdown, "Copy"));
-  toolbar.appendChild(copyAllBtn);
-  container.insertBefore(toolbar, container.firstChild);
+  renderMarkdownWithCopyButtons(markdown, container, { showCopyAll: true });
 };
 
 // ============================================
@@ -1076,7 +1085,7 @@ const renderMarkdown = (markdown: string, container: HTMLElement) => {
 const closePanelEl = document.getElementById("close-panel");
 if (!closePanelEl) throw new Error("Missing #close-panel element");
 closePanelEl.addEventListener("click", () => {
-  window.parent.postMessage({ type: "ERRORDECODER_CLOSE" }, "*");
+  window.parent.postMessage({ type: "ERRORDECODER_CLOSE" }, `chrome-extension://${chrome.runtime.id}`);
 });
 
 const settingsLinkEl = document.getElementById("settings-link");

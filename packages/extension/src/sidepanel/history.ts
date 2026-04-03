@@ -1,9 +1,11 @@
+import type { ModelName } from "@shared/types";
+
 export type DecodeHistoryEntry = {
   id: string;
   decodeId?: string;
   errorPreview: string;
   markdown: string;
-  model: "haiku" | "sonnet";
+  model: ModelName;
   cached: boolean;
   timestamp: number;
   feedbackGiven?: "up" | "down";

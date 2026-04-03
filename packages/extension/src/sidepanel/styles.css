@@ -722,3 +722,11 @@ body {
   cursor: pointer;
   width: 100%;
 }
+
+
+.decode-meta {
+  font-size: 11px;
+  color: var(--text-dim, #888);
+  margin-top: 8px;
+  text-align: right;
+}
