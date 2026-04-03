@@ -49,13 +49,21 @@ decodeRoute.post("/", authMiddleware, rateLimitMiddleware, async (c) => {
   // Determine model
   const useModel = requestedModel === "sonnet" && user.plan === "pro" ? "sonnet" : "haiku";
 
-  // Sonnet limit check
+  // Sonnet limit check — atomic to prevent TOCTOU race
   if (useModel === "sonnet") {
     const currentMonth = new Date().toISOString().slice(0, 7);
-    const sonnetUsed = user.sonnetMonth === currentMonth
-      ? (user.sonnetUsesThisMonth ?? 0) : 0;
+    const { data: allowed, error: sonnetError } = await supabase.rpc("check_and_increment_sonnet_usage", {
+      p_user_id: user.id,
+      p_month: currentMonth,
+      p_limit: PRO_SONNET_MONTHLY_LIMIT,
+    });
 
-    if (sonnetUsed >= PRO_SONNET_MONTHLY_LIMIT) {
+    if (sonnetError) {
+      console.error("[Decode] Sonnet check failed:", sonnetError.message);
+      return c.json({ error: { message: "Service temporarily unavailable.", code: errorCodes.serverError } }, 503);
+    }
+
+    if (!allowed) {
       return c.json({
         error: { message: "Monthly Deep Analysis limit reached (20/month). You can still decode with Haiku.", code: errorCodes.sonnetLimitReached },
       }, 429);
@@ -69,13 +77,17 @@ decodeRoute.post("/", authMiddleware, rateLimitMiddleware, async (c) => {
   if (isCacheable) {
     const cached = await cacheUtils.get(errorHash);
     if (cached) {
-      const decodeId = await logDecode(user.id, errorHash, errorText, cached, useModel, true, 0, 0, 0, 0);
+      const decodeId = crypto.randomUUID();
+      logDecode(decodeId, user.id, errorHash, errorText, cached, useModel, true, 0, 0, 0, 0);
       return c.json({ data: { markdown: cached, model: useModel, cached: true, decodeId } });
     }
   }
 
   // Pick system prompt based on mode
   const systemPrompt = mode === "inspect" ? ELEMENT_SYSTEM_PROMPT : SYSTEM_PROMPT;
+
+  // Pre-generate decode ID so it can be returned without awaiting the log write
+  const decodeId = crypto.randomUUID();
 
   // Call Anthropic
   const startTime = Date.now();
@@ -103,19 +115,8 @@ decodeRoute.post("/", authMiddleware, rateLimitMiddleware, async (c) => {
       cacheUtils.set(errorHash, markdown).catch(() => {});
     }
 
-    // Increment Sonnet counter
-    if (useModel === "sonnet") {
-      const currentMonth = new Date().toISOString().slice(0, 7);
-      supabase.rpc("increment_sonnet_usage", { p_user_id: user.id, p_month: currentMonth }).then(() => {});
-    }
-
-    // Log and get decode ID for feedback
-    const decodeId = await logDecode(user.id, errorHash, errorText, markdown, useModel, false, inputTokens, outputTokens, costCents, responseTimeMs);
-
-    // Increment daily usage only on success (free users)
-    if (user.plan === "free" && !user.isAdmin) {
-      supabase.rpc("increment_daily_usage", { p_user_id: user.id }).then(() => {});
-    }
+    // Fire-and-forget log — don't block the response on a DB write
+    logDecode(decodeId, user.id, errorHash, errorText, markdown, useModel, false, inputTokens, outputTokens, costCents, responseTimeMs);
 
     return c.json({ data: { markdown, model: useModel, cached: false, decodeId } });
   } catch (err) {
@@ -130,13 +131,15 @@ decodeRoute.post("/", authMiddleware, rateLimitMiddleware, async (c) => {
   }
 });
 
-const logDecode = async (
+const logDecode = (
+  id: string,
   userId: string, errorHash: string, errorText: string, markdown: string,
   modelUsed: "haiku" | "sonnet",
   cacheHit: boolean, inputTokens: number, outputTokens: number,
   costCents: number, responseTimeMs: number
-): Promise<string | null> => {
-  const { data, error } = await supabase.from("decodes").insert({
+): void => {
+  supabase.from("decodes").insert({
+    id,
     user_id: userId,
     error_text_hash: errorHash,
     error_text_preview: errorText.slice(0, 200),
@@ -147,11 +150,7 @@ const logDecode = async (
     cost_cents: costCents,
     cache_hit: cacheHit,
     response_time_ms: responseTimeMs,
-  }).select("id").single();
-
-  if (error) {
-    console.error("[Decode Log] Failed:", error.message);
-    return null;
-  }
-  return data?.id ?? null;
+  }).then(({ error }) => {
+    if (error) console.error("[Decode Log] Failed:", error.message);
+  });
 };
