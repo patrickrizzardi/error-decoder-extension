@@ -10,7 +10,7 @@ stripeWebhookRoute.post("/", async (c) => {
   const signature = c.req.header("stripe-signature");
 
   if (!signature) {
-    return c.json({ error: { message: "Missing signature", code: "INVALID_SIGNATURE" } }, 400);
+    return c.json({ error: { message: "Missing signature", code: errorCodes.webhookSignatureFailed } }, 400);
   }
 
   const rawBody = await c.req.text();
@@ -21,8 +21,22 @@ stripeWebhookRoute.post("/", async (c) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error(`[Stripe Webhook] Signature verification failed: ${message}`);
-    return c.json({ error: { message: "Invalid signature", code: "INVALID_SIGNATURE" } }, 400);
+    return c.json({ error: { message: "Invalid signature", code: errorCodes.webhookSignatureFailed } }, 400);
   }
+
+  // Idempotency: skip already-processed events
+  const { data: existing } = await supabase
+    .from("webhook_events")
+    .select("event_id")
+    .eq("event_id", event.id)
+    .single();
+
+  if (existing) {
+    return c.json({ data: { received: true, duplicate: true } });
+  }
+
+  // Record this event (before processing to prevent race conditions)
+  await supabase.from("webhook_events").insert({ event_id: event.id });
 
   switch (event.type) {
     case "checkout.session.completed": {
@@ -134,5 +148,5 @@ stripeWebhookRoute.post("/", async (c) => {
       console.log(`[Stripe Webhook] Unhandled event: ${event.type}`);
   }
 
-  return c.json({ received: true });
+  return c.json({ data: { received: true } });
 });
